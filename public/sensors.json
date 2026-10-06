@@ -1,0 +1,80 @@
+[
+  {
+    "id": "s1",
+    "label": "Aisle A-01",
+    "position": { "x": 5200, "y": -2300 },
+    "readings": [
+      { "timestamp": "2026-08-24T08:00:00Z", "temperatureC": 20.5, "humidityPct": 45 },
+      { "timestamp": "2026-08-24T08:00:05Z", "temperatureC": 20.6, "humidityPct": 45 },
+      { "timestamp": "2026-08-24T08:00:10Z", "temperatureC": 20.7, "humidityPct": 44 },
+      { "timestamp": "2026-08-24T08:00:15Z", "temperatureC": 20.7, "humidityPct": 44 },
+      { "timestamp": "2026-08-24T08:00:20Z", "temperatureC": 20.8, "humidityPct": 44 },
+      { "timestamp": "2026-08-24T08:00:25Z", "temperatureC": 20.9, "humidityPct": 43 }
+    ]
+  },
+  {
+    "id": "s2",
+    "label": "Aisle A-02",
+    "position": { "x": 5200, "y": 3200 },
+    "readings": [
+      { "timestamp": "2026-08-24T08:00:00Z", "temperatureC": 20.8, "humidityPct": 44 },
+      { "timestamp": "2026-08-24T08:00:05Z", "temperatureC": 20.9, "humidityPct": 44 },
+      { "timestamp": "2026-08-24T08:00:10Z", "temperatureC": 20.9, "humidityPct": 44 },
+      { "timestamp": "2026-08-24T08:00:15Z", "temperatureC": 21.0, "humidityPct": 43 },
+      { "timestamp": "2026-08-24T08:00:20Z", "temperatureC": 21.1, "humidityPct": 43 },
+      { "timestamp": "2026-08-24T08:00:25Z", "temperatureC": 21.2, "humidityPct": 43 }
+    ]
+  },
+  {
+    "id": "s3",
+    "label": "Aisle B-01",
+    "position": { "x": 9000, "y": -2300 },
+    "readings": [
+      { "timestamp": "2026-08-24T08:00:00Z", "temperatureC": 23.5, "humidityPct": 40 },
+      { "timestamp": "2026-08-24T08:00:05Z", "temperatureC": 23.6, "humidityPct": 40 },
+      { "timestamp": "2026-08-24T08:00:10Z", "temperatureC": 23.6, "humidityPct": 39 },
+      { "timestamp": "2026-08-24T08:00:15Z", "temperatureC": 23.7, "humidityPct": 39 },
+      { "timestamp": "2026-08-24T08:00:20Z", "temperatureC": 23.8, "humidityPct": 39 },
+      { "timestamp": "2026-08-24T08:00:25Z", "temperatureC": 23.9, "humidityPct": 39 }
+    ]
+  },
+  {
+    "id": "s4",
+    "label": "Aisle B-02",
+    "position": { "x": 9000, "y": 3200 },
+    "readings": [
+      { "timestamp": "2026-08-24T08:00:00Z", "temperatureC": 24.0, "humidityPct": 39 },
+      { "timestamp": "2026-08-24T08:00:05Z", "temperatureC": 24.1, "humidityPct": 39 },
+      { "timestamp": "2026-08-24T08:00:10Z", "temperatureC": 24.1, "humidityPct": 38 },
+      { "timestamp": "2026-08-24T08:00:15Z", "temperatureC": 24.2, "humidityPct": 38 },
+      { "timestamp": "2026-08-24T08:00:20Z", "temperatureC": 24.3, "humidityPct": 38 },
+      { "timestamp": "2026-08-24T08:00:25Z", "temperatureC": 24.4, "humidityPct": 38 }
+    ]
+  },
+  {
+    "id": "s5",
+    "label": "Aisle C-01",
+    "position": { "x": 12800, "y": -2300 },
+    "readings": [
+      { "timestamp": "2026-08-24T08:00:00Z", "temperatureC": 27.5, "humidityPct": 33 },
+      { "timestamp": "2026-08-24T08:00:05Z", "temperatureC": 27.6, "humidityPct": 33 },
+      { "timestamp": "2026-08-24T08:00:10Z", "temperatureC": 27.7, "humidityPct": 32 },
+      { "timestamp": "2026-08-24T08:00:15Z", "temperatureC": 27.8, "humidityPct": 32 },
+      { "timestamp": "2026-08-24T08:00:20Z", "temperatureC": 27.9, "humidityPct": 32 },
+      { "timestamp": "2026-08-24T08:00:25Z", "temperatureC": 28.1, "humidityPct": 32 }
+    ]
+  },
+  {
+    "id": "s6",
+    "label": "Aisle C-02",
+    "position": { "x": 12800, "y": 3200 },
+    "readings": [
+      { "timestamp": "2026-08-24T08:00:00Z", "temperatureC": 28.2, "humidityPct": 32 },
+      { "timestamp": "2026-08-24T08:00:05Z", "temperatureC": 28.3, "humidityPct": 32 },
+      { "timestamp": "2026-08-24T08:00:10Z", "temperatureC": 28.4, "humidityPct": 31 },
+      { "timestamp": "2026-08-24T08:00:15Z", "temperatureC": 28.5, "humidityPct": 31 },
+      { "timestamp": "2026-08-24T08:00:20Z", "temperatureC": 28.6, "humidityPct": 31 },
+      { "timestamp": "2026-08-24T08:00:25Z", "temperatureC": 28.8, "humidityPct": 31 }
+    ]
+  }
+]
