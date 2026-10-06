@@ -1,0 +1,20 @@
+.scaleBar {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.bar {
+  height: 6px;
+  border: 2px solid var(--text);
+  border-top: none;
+}
+
+.label {
+  font-size: 0.75rem;
+  color: var(--text);
+}

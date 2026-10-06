@@ -25,12 +25,16 @@ Running log of decisions, AI-assist usage, rejected ideas and scope cuts. Folded
 - Claude Code used to inspect the DXF structure (awk over sections), scaffold, and pair on implementation step by step.
 - Step 2 (geometry): drafted the pure viewport/bounds functions and their tests with Claude; reviewed the zoom-about-cursor derivation by hand (tx = anchor.x - m.x*s, ty = anchor.y + m.y*s because of the Y flip).
 - Step 3 (DXF): Claude probed dxf-parser's output (radians for arcs, `shape` flag for closed polylines, numeric `$INSUNITS`) before writing the normaliser, and drafted the unit heuristic + SVG arc conversion. The sweep-flag reasoning (CCW in model space stays sweep=1 inside the Y-flipped group) was checked by hand.
+- Step 4 (pan/zoom): Claude drafted the gesture hook, viewport-controls hook, context, toolbar and scale bar plus the interaction tests. The "capture the pointer only after the drag threshold" detail was chosen deliberately so clicks still reach overlay markers (pointer capture would otherwise redirect the click to the viewer).
 - (append as we go)
 
 ## Rejected / reworked
 
 - Step 3: first drafts of `useDrawing` and `FloorplanViewer` called `setState` synchronously inside `useEffect` (set loading / fit on resize). Lint flagged it; reworked both to _derive_ state instead: the load state is derived from a settled result tagged with (url, attempt), and the viewport is derived from `fitBounds` until the user interacts. Fewer renders, no effect-reset dance.
 - Step 3: a test asserted all sensors lie inside the zone polyline. It failed because aisle C is outside the zone. Kept the finding, fixed the assumption.
+- Step 4: React's synthetic `onWheel` is registered passive, so `preventDefault()` is ignored and the page scrolls while zooming. Reworked to a native non-passive listener attached in an effect.
+- Step 4: a `useCallback` that read `ref.current` tripped the React Compiler memoisation lint. Replaced with a plain helper that takes the element from the event instead of the ref.
+- Step 4: split `ViewportContext` (context + hook) from `ViewportProvider` (component) so Fast Refresh works; moved the scale-bar maths to its own module for the same reason, which also made it trivially testable.
 
 ## Scope cuts
 

@@ -1,49 +1,61 @@
-import { useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 
 import { FIT_PADDING_PX } from '@/config'
 import type { Drawing } from '@/dxf'
-import { fitBounds, type Viewport } from '@/geometry'
 
 import { FloorplanLayer } from './FloorplanLayer'
 import styles from './FloorplanViewer.module.css'
+import { ScaleBar } from './ScaleBar'
 import { useElementSize } from './useElementSize'
+import { usePanZoom } from './usePanZoom'
+import { useViewportControls } from './useViewportControls'
+import { ViewerControls } from './ViewerControls'
+import { ViewportProvider } from './ViewportProvider'
 
 interface FloorplanViewerProps {
   readonly drawing: Drawing
-}
-
-/** A viewport the user has set by interacting, remembered against the drawing it was set for. */
-interface UserViewport {
-  readonly drawing: Drawing
-  readonly viewport: Viewport
+  /**
+   * Overlays, rendered inside the SVG above the floorplan. Each one reads the
+   * current mapping through `useViewport()` and draws itself in screen space.
+   */
+  readonly children?: ReactNode
 }
 
 /**
- * The viewer owns the `Viewport` and the SVG surface. Layers receive the viewport and
- * draw themselves; the viewer never knows what a layer contains.
- *
- * Until the user pans or zooms, the viewport is *derived*: fit the whole drawing to
- * whatever space is available. A user-set viewport is kept only for the drawing it was
- * set on, so loading a different drawing fits again without an effect or a reset.
+ * The viewer owns the viewport, the gestures and the SVG surface. It knows nothing
+ * about what the overlays contain; they are composed in as children.
  */
-export function FloorplanViewer({ drawing }: FloorplanViewerProps) {
+export function FloorplanViewer({ drawing, children }: FloorplanViewerProps) {
   const { ref, size } = useElementSize<HTMLDivElement>()
-  const [userViewport] = useState<UserViewport | null>(null)
-
-  const fitted = useMemo(() => fitBounds(drawing.bounds, size, FIT_PADDING_PX), [drawing, size])
-  const viewport = userViewport?.drawing === drawing ? userViewport.viewport : fitted
+  const controls = useViewportControls(drawing.bounds, size, FIT_PADDING_PX)
+  const { handlers, isDragging } = usePanZoom(controls, ref)
+  const measured = size.width > 0 && size.height > 0
 
   return (
-    <div ref={ref} className={styles.viewer} data-testid="floorplan-viewer">
-      <svg
-        className={styles.surface}
-        width={size.width}
-        height={size.height}
-        role="img"
-        aria-label="Floorplan"
-      >
-        <FloorplanLayer drawing={drawing} viewport={viewport} />
-      </svg>
+    <div
+      ref={ref}
+      className={isDragging ? `${styles.viewer} ${styles.dragging}` : styles.viewer}
+      data-testid="floorplan-viewer"
+      tabIndex={0}
+      aria-label="Floorplan. Drag to pan, scroll to zoom, press 0 to fit."
+      {...handlers}
+    >
+      <ViewportProvider viewport={controls.viewport} size={size}>
+        {measured && (
+          <svg
+            className={styles.surface}
+            width={size.width}
+            height={size.height}
+            role="img"
+            aria-label="Floorplan"
+          >
+            <FloorplanLayer drawing={drawing} viewport={controls.viewport} />
+            {children}
+          </svg>
+        )}
+        <ViewerControls controls={controls} />
+        <ScaleBar />
+      </ViewportProvider>
     </div>
   )
 }

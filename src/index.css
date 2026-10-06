@@ -15,6 +15,9 @@
   --viewer-bg: #ffffff;
   --floorplan-stroke: #3a4149;
   --floorplan-zone-fill: rgba(70, 130, 255, 0.08);
+  --panel-bg: #ffffff;
+  --panel-hover: #eef1f5;
+  --focus: #4a7dff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -26,6 +29,9 @@
     --viewer-bg: #1b1f24;
     --floorplan-stroke: #c7ccd2;
     --floorplan-zone-fill: rgba(90, 150, 255, 0.12);
+    --panel-bg: #22272e;
+    --panel-hover: #2e343c;
+    --focus: #7aa2ff;
   }
 }
 

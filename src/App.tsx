@@ -1,6 +1,6 @@
 import { FLOORPLAN_URL } from '@/config'
 import { useDrawing } from '@/dxf'
-import { FloorplanViewer } from '@/viewer/FloorplanViewer'
+import { FloorplanViewer } from '@/viewer'
 
 import styles from './App.module.css'
 

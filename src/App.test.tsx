@@ -3,6 +3,8 @@ import { resolve } from 'node:path'
 
 import { render, screen } from '@testing-library/react'
 
+import { restoreViewerLayout, stubViewerLayout } from '@/test/viewerLayout'
+
 import { App } from './App'
 
 const floorplanSource = readFileSync(resolve(__dirname, '../public/floorplan.dxf'), 'utf8')
@@ -15,20 +17,8 @@ function mockFetch(handler: (url: string) => Response) {
 }
 
 describe('App', () => {
-  beforeAll(() => {
-    // jsdom has no ResizeObserver; the viewer only needs it to exist.
-    vi.stubGlobal(
-      'ResizeObserver',
-      class {
-        observe() {}
-        disconnect() {}
-      },
-    )
-  })
-
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
+  beforeAll(() => stubViewerLayout())
+  afterAll(restoreViewerLayout)
 
   it('shows a loading state and then renders the floorplan', async () => {
     mockFetch(() => new Response(floorplanSource, { status: 200 }))
