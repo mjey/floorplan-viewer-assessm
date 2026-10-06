@@ -8,3 +8,4 @@ export {
   type PolledReadings,
   type UsePolledReadingsOptions,
 } from './usePolledReadings'
+export { useSensors } from './useSensors'

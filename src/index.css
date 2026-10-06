@@ -18,6 +18,9 @@
   --panel-bg: #ffffff;
   --panel-hover: #eef1f5;
   --focus: #4a7dff;
+  --status-live: #2e9e5b;
+  --status-stale: #d99a1e;
+  --status-error: #d64545;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -32,6 +35,9 @@
     --panel-bg: #22272e;
     --panel-hover: #2e343c;
     --focus: #7aa2ff;
+    --status-live: #4cc27a;
+    --status-stale: #e6b04a;
+    --status-error: #ef6b6b;
   }
 }
 

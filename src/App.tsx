@@ -1,44 +1,65 @@
-import { FLOORPLAN_URL } from '@/config'
+import { FLOORPLAN_URL, POLL_INTERVAL_MS } from '@/config'
 import { useDrawing } from '@/dxf'
+import { useDocumentVisibility } from '@/lib/useDocumentVisibility'
+import { usePolledReadings, useSensors, type SensorApi } from '@/sensors'
+import { StatusBar } from '@/ui/StatusBar'
 import { FloorplanViewer } from '@/viewer'
 
 import styles from './App.module.css'
 
-export function App() {
-  const { state, reload } = useDrawing(FLOORPLAN_URL)
+interface AppProps {
+  /** Injected so the app never knows which transport is behind the sensors. */
+  readonly sensorApi: SensorApi
+}
+
+export function App({ sensorApi }: AppProps) {
+  const drawing = useDrawing(FLOORPLAN_URL)
+  const sensors = useSensors(sensorApi)
+  const visible = useDocumentVisibility()
+  const readings = usePolledReadings(sensorApi, { intervalMs: POLL_INTERVAL_MS, enabled: visible })
 
   return (
     <div className={styles.app}>
       <header className={styles.header}>
         <h1 className={styles.title}>Floorplan Viewer</h1>
-        {state.status === 'success' && (
+        {drawing.state.status === 'success' && (
           <p className={styles.meta}>
-            {state.data.entityCount} entities · units: {state.data.units.declared}
-            {state.data.units.source === 'heuristic' && ' (corrected)'}
+            {drawing.state.data.entityCount} entities · units: {drawing.state.data.units.declared}
+            {drawing.state.data.units.source === 'heuristic' && ' (corrected)'}
           </p>
         )}
+        <StatusBar readings={readings} paused={!visible} />
       </header>
 
       <main className={styles.main}>
-        {state.status === 'loading' && (
+        {drawing.state.status === 'loading' && (
           <p className={styles.status} role="status">
             Loading floorplan…
           </p>
         )}
-        {state.status === 'error' && (
+        {drawing.state.status === 'error' && (
           <div className={styles.status} role="alert">
-            <p>Could not load the floorplan: {state.error.message}</p>
-            <button type="button" onClick={reload}>
+            <p>Could not load the floorplan: {drawing.state.error.message}</p>
+            <button type="button" onClick={drawing.reload}>
               Retry
             </button>
           </div>
         )}
-        {state.status === 'success' && <FloorplanViewer drawing={state.data} />}
+        {drawing.state.status === 'success' && <FloorplanViewer drawing={drawing.state.data} />}
+
+        {sensors.state.status === 'error' && (
+          <div className={styles.notice} role="alert">
+            <p>Could not load sensors: {sensors.state.error.message}</p>
+            <button type="button" onClick={sensors.reload}>
+              Retry
+            </button>
+          </div>
+        )}
       </main>
 
-      {state.status === 'success' && state.data.warnings.length > 0 && (
+      {drawing.state.status === 'success' && drawing.state.data.warnings.length > 0 && (
         <footer className={styles.warnings}>
-          {state.data.warnings.map((warning) => (
+          {drawing.state.data.warnings.map((warning) => (
             <p key={warning}>{warning}</p>
           ))}
         </footer>

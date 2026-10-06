@@ -1,0 +1,76 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+
+.indicator {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex: none;
+}
+
+.live {
+  background: var(--status-live);
+}
+
+.stale {
+  background: var(--status-stale);
+}
+
+.error {
+  color: var(--status-error);
+}
+
+.indicator.error {
+  background: var(--status-error);
+}
+
+.loading,
+.paused {
+  background: var(--text-muted);
+}
+
+.fetching {
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fetching {
+    animation: none;
+  }
+}
+
+.label {
+  font-weight: 600;
+}
+
+.detail {
+  color: var(--text-muted);
+}
+
+.refresh {
+  padding: 0 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel-bg);
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.refresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
