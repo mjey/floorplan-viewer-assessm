@@ -171,6 +171,31 @@ Implement `SensorApi` over a real endpoint and construct it in `main.tsx` instea
 
 Run with `npm test`.
 
+### Manual test checklist
+
+Each line maps to a requirement in the brief. Start with `npm run dev` and open http://localhost:5173.
+
+| Requirement                | How to check                                                 | Expected                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Renders the floorplan      | Load the page                                                | Walls, two door swings, two rack rows and a tinted zone; footer says the units were corrected from millimetres to metres                              |
+| Pan                        | Drag anywhere on the map; arrow keys when the map is focused | Floorplan and markers move together; the Fit button becomes enabled                                                                                   |
+| Zoom                       | Wheel over a marker; `+` / `-`; double-click                 | The point under the cursor stays put; markers keep their size; the scale bar relabels                                                                 |
+| Fit                        | Click the fit button or press `0`                            | The whole hall is centred with a margin; the button disables again                                                                                    |
+| Sensors at model positions | Compare markers with `public/sensors.json`                   | A column at the left, B in the middle, C at the right; the lower row is y = -2300, the upper row y = 3200                                             |
+| Current temperature shown  | Read the markers                                             | Value inside each disc; colour runs blue to red from 18 to 30 °C                                                                                      |
+| Detail on hover            | Hover or Tab to a marker                                     | Tooltip with label, temperature, humidity and reading time; flips at the edges                                                                        |
+| Detail on click            | Click a marker or press Enter on it                          | Card with label, temperature, humidity, time, position and id; Escape or the close button dismisses it; clicking the same marker again toggles it off |
+| Live updates               | Watch for 30 s                                               | Values change every 5 s and wrap after six readings; "updated N s ago" ticks                                                                          |
+| Polled API structure       | Open DevTools, Network                                       | `sensors.json` is fetched once; readings come from the `SensorApi` mock, which is the only transport the app knows                                    |
+| Loading state              | Open `?latency=2000-3000`                                    | Status shows Connecting with a pulsing dot until the first poll lands                                                                                 |
+| Slow poll                  | Same URL, keep watching                                      | The dot pulses during each poll; no overlapping requests, the next poll is armed only after the previous settles                                      |
+| Failure keeps last values  | Open `?failEvery=2`                                          | Every second poll turns the status to Stale, markers go dashed, the card says "showing last known values"; the next poll returns to Live              |
+| Total failure              | Stop the dev server, or open `?failEvery=1`                  | Status shows Offline with the reason; the refresh button retries                                                                                      |
+| Floorplan failure          | Rename `public/floorplan.dxf` and reload                     | An error with a Retry button; restore the file and retry                                                                                              |
+| Sensor list failure        | Break the JSON (remove an `id`) and reload                   | A notice naming the bad path, e.g. `[0].id must be a non-empty string`; Retry recovers once fixed                                                     |
+| Dev-mode double mount      | Default URL with React StrictMode (always on in `main.tsx`)  | Reaches Live every time; a cancelled `sensors.json` request from the throwaway mount is expected and harmless                                         |
+| Background tab             | Switch tabs for a while and come back                        | Status shows Paused while hidden; polling resumes immediately on return                                                                               |
+
 ## How I used AI assistants
 
 I worked with Claude Code throughout, in a plan-first, step-by-step loop. The plan came first: read both briefs, inspect the DXF with shell tools (that is how the units mismatch and the orphaned blocks were found before any code existed), decide the architecture and the time boxes. Then each step was drafted with the assistant, reviewed in the editor, run through typecheck, lint and tests, verified in a headless browser screenshot of the production build, and committed as one commit. The git history is that sequence.
@@ -186,6 +211,7 @@ Things the assistant produced that I rejected or reworked:
 - A test asserted every sensor lies inside the zone polyline. It failed because aisle C does not. The finding was kept and the assumption fixed.
 - The app originally constructed the mock API itself. Moved to `main.tsx` and injected, which is what made the app testable with a scripted API.
 - Rendering markers inside the flipped floorplan group was considered for its zero extra maths and rejected for mirrored text and zoom-scaled markers.
+- Found in manual testing after the README was first written: in the dev server the status sometimes stuck on Connecting with a cancelled request for `sensors.json`. Cause: React StrictMode mounts, unmounts and remounts in development; the mock cached its one feed load bound to the first caller's abort signal, so the throwaway mount's abort cancelled the load for the real mount, and both hooks then swallowed the resulting AbortError as if it were their own. Fixed in three places, each with a test that failed first: the shared load is no longer tied to any caller's signal, and both hooks silence an AbortError only when their own controller aborted. The same change also fixed a latent case where a late response from a superseded load could knock the async-load hook back to loading.
 
 Decisions made deliberately before code was written, rather than accepted from a draft: the `setTimeout` chain, keeping the last snapshot and flagging it stale, capturing the pointer only after the drag threshold, and specifying the marker alignment test before the overlay components existed.
 
@@ -212,4 +238,13 @@ Decisions made deliberately before code was written, rather than accepted from a
 
 ## Configuration
 
-All tunables are in `src/config.ts`: asset URLs, the 5-second poll interval, the mock failure cadence and the fit padding. Zoom limits are in `src/geometry/viewport.ts`; the temperature colour range is in `src/overlays/sensors/temperatureScale.ts`.
+All tunables are in `src/config.ts`: asset URLs, the 5-second poll interval, the mock latency range and failure cadence, and the fit padding.
+
+For manual testing of the slow, failing and recovering states, two query parameters override the mock per page load:
+
+| Parameter         | Effect                                                  | Example                                    |
+| ----------------- | ------------------------------------------------------- | ------------------------------------------ |
+| `failEvery=N`     | reject every Nth poll; `0` disables failures            | `http://localhost:5173/?failEvery=2`       |
+| `latency=MIN-MAX` | simulated latency range in ms; a single number fixes it | `http://localhost:5173/?latency=2000-3000` |
+
+They are parsed in `src/demoOptions.ts` and applied in `main.tsx`; the rest of the app is unaware of them. Zoom limits are in `src/geometry/viewport.ts`; the temperature colour range is in `src/overlays/sensors/temperatureScale.ts`.
