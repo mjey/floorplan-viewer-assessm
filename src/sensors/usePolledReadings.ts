@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer } from 'react'
 
-import { isAbortError, toError } from '@/lib/loadState'
+import { toError } from '@/lib/loadState'
 
 import type { SensorApi } from './api'
 import type { ReadingsSnapshot } from './types'
@@ -93,7 +93,8 @@ export function usePolledReadings(
         if (!isCurrent()) return
         dispatch({ type: 'poll-succeeded', snapshot, at: Date.now() })
       } catch (cause) {
-        if (!isCurrent() || isAbortError(cause)) return
+        // Only our own abort is silent; a foreign AbortError is a failure like any other.
+        if (!isCurrent()) return
         dispatch({ type: 'poll-failed', error: toError(cause) })
       }
       if (isCurrent()) timer = setTimeout(poll, intervalMs)

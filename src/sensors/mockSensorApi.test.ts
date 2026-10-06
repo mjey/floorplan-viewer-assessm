@@ -117,3 +117,28 @@ describe('createMockSensorApi', () => {
     }
   })
 })
+
+describe('createMockSensorApi: shared feed load', () => {
+  it("does not let one caller's abort cancel the shared feed load for later callers", async () => {
+    let release: () => void = () => {}
+    const source = vi.fn(
+      () =>
+        new Promise<readonly SensorFeed[]>((resolve) => {
+          release = () => resolve(feed)
+        }),
+    )
+    const api = createMockSensorApi({ source, latencyMs: instant })
+
+    // First caller (think: StrictMode's throwaway mount) aborts while the load is in flight.
+    const first = new AbortController()
+    const aborted = api.listSensors(first.signal)
+    first.abort()
+    await expect(aborted).rejects.toMatchObject({ name: 'AbortError' })
+
+    // Second caller must still get the feed, from the same single load.
+    const second = api.getLatestReadings()
+    release()
+    await expect(second).resolves.toMatchObject({ sequence: 1 })
+    expect(source).toHaveBeenCalledTimes(1)
+  })
+})

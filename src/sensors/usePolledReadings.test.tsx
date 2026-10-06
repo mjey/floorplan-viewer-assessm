@@ -24,7 +24,8 @@ function scriptedApi(outcomes: Array<ReadingsSnapshot | Error>): SensorApi & { c
       api.calls += 1
       const outcome = outcomes[Math.min(index, outcomes.length - 1)]
       index += 1
-      return outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome!)
+      // Classify by shape: under jsdom a DOMException is not an instance of the outer Error.
+      return outcome && 'readings' in outcome ? Promise.resolve(outcome) : Promise.reject(outcome)
     },
   }
   return api
@@ -171,5 +172,27 @@ describe('usePolledReadings', () => {
 
     expect(api.calls).toBe(2)
     expect(result.current.snapshot?.sequence).toBe(2)
+  })
+})
+
+describe('usePolledReadings: abort handling', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('treats an AbortError it did not cause as a failed poll and keeps polling', async () => {
+    const api = scriptedApi([new DOMException('aborted upstream', 'AbortError'), snapshot(2)])
+    const { result } = renderHook(() => usePolledReadings(api, { intervalMs: INTERVAL }))
+
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(result.current.status).toBe('error')
+
+    await act(() => vi.advanceTimersByTimeAsync(INTERVAL))
+    expect(result.current.status).toBe('live')
+    expect(api.calls).toBe(2)
   })
 })

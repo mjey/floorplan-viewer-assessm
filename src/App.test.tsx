@@ -1,10 +1,18 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+import { StrictMode } from 'react'
+
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-import type { ReadingsSnapshot, Sensor, SensorApi } from '@/sensors'
+import {
+  createMockSensorApi,
+  loadSensorFeed,
+  type ReadingsSnapshot,
+  type Sensor,
+  type SensorApi,
+} from '@/sensors'
 import { restoreViewerLayout, stubViewerLayout } from '@/test/viewerLayout'
 
 import { App } from './App'
@@ -20,10 +28,17 @@ const snapshot: ReadingsSnapshot = {
   sequence: 1,
 }
 
+/** A fetch stand-in that, like the real one, rejects with AbortError once its signal aborts. */
 function mockFetch(handler: (url: string) => Response) {
   vi.stubGlobal(
     'fetch',
-    vi.fn((input: RequestInfo | URL) => Promise.resolve(handler(String(input)))),
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      await Promise.resolve()
+      if (init?.signal?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError')
+      }
+      return handler(String(input))
+    }),
   )
 }
 
@@ -122,5 +137,36 @@ describe('App: sensor interaction path', () => {
 
     await user.click(screen.getByRole('button', { name: /close details/i }))
     expect(screen.queryByTestId('sensor-detail')).not.toBeInTheDocument()
+  })
+})
+
+describe('App: real mock API under StrictMode (dev-mode double mount)', () => {
+  beforeAll(() => stubViewerLayout())
+  afterAll(restoreViewerLayout)
+
+  it('reaches Live and shows every sensor despite the simulated unmount/remount', async () => {
+    const sensorsJson = readFileSync(resolve(__dirname, '../public/sensors.json'), 'utf8')
+    mockFetch((url) =>
+      url.endsWith('sensors.json')
+        ? new Response(sensorsJson, {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        : new Response(floorplanSource, { status: 200 }),
+    )
+    const api = createMockSensorApi({
+      source: () => loadSensorFeed('/sensors.json'),
+      latencyMs: { min: 0, max: 0 },
+    })
+
+    render(
+      <StrictMode>
+        <App sensorApi={api} />
+      </StrictMode>,
+    )
+
+    expect(await screen.findByText('Live')).toBeInTheDocument()
+    const markers = await screen.findAllByRole('button', { name: /^Aisle .* °C$/ })
+    expect(markers).toHaveLength(6)
   })
 })

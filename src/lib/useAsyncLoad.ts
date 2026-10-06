@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { isAbortError, toError, type LoadState } from './loadState'
+import { toError, type LoadState } from './loadState'
 
 export interface AsyncLoad<T> {
   readonly state: LoadState<T>
@@ -22,8 +22,7 @@ const LOADING = { status: 'loading' } as const
  * keeps the dependency explicit and statically checkable.
  *
  * The public `state` is *derived*: it is `loading` until a result has settled for the
- * current attempt. That keeps the effect free of synchronous `setState` calls and
- * makes a response from a superseded request harmless.
+ * current attempt. That keeps the effect free of synchronous `setState` calls.
  */
 export function useAsyncLoad<T>(loader: (signal: AbortSignal) => Promise<T>): AsyncLoad<T> {
   const [attempt, setAttempt] = useState(0)
@@ -32,10 +31,16 @@ export function useAsyncLoad<T>(loader: (signal: AbortSignal) => Promise<T>): As
   useEffect(() => {
     const controller = new AbortController()
 
+    // Once this attempt is aborted (unmount, reload, loader change) its outcome no longer
+    // matters, success or failure. Checking the signal rather than the error type means a
+    // foreign AbortError thrown by the loader is still reported as the error it is.
     loader(controller.signal)
-      .then((data) => setSettled({ attempt, state: { status: 'success', data } }))
+      .then((data) => {
+        if (controller.signal.aborted) return
+        setSettled({ attempt, state: { status: 'success', data } })
+      })
       .catch((cause: unknown) => {
-        if (isAbortError(cause)) return
+        if (controller.signal.aborted) return
         setSettled({ attempt, state: { status: 'error', error: toError(cause) } })
       })
 

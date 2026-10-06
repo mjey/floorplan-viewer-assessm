@@ -3,7 +3,7 @@ import type { Reading, ReadingsSnapshot, Sensor, SensorFeed, SensorId } from './
 
 export interface MockSensorApiOptions {
   /** Where the feed comes from; loaded lazily on first use and cached. */
-  readonly source: (signal?: AbortSignal) => Promise<readonly SensorFeed[]>
+  readonly source: () => Promise<readonly SensorFeed[]>
   /** Simulated network latency range in milliseconds. */
   readonly latencyMs?: { readonly min: number; readonly max: number }
   /** Reject every Nth `getLatestReadings` call (0 or undefined: never fail). */
@@ -32,8 +32,14 @@ export function createMockSensorApi(options: MockSensorApiOptions): SensorApi {
   let feedPromise: Promise<readonly SensorFeed[]> | null = null
   let sequence = 0
 
-  const loadFeed = (signal?: AbortSignal): Promise<readonly SensorFeed[]> => {
-    feedPromise ??= options.source(signal).catch((error: unknown) => {
+  /**
+   * The feed is loaded once and shared. It is deliberately NOT tied to any caller's
+   * abort signal: one caller giving up (React StrictMode's throwaway mount, a retry,
+   * an unmount) must not cancel the load for everyone else. Callers instead race the
+   * shared promise against their own signal in `abortable`.
+   */
+  const loadFeed = (): Promise<readonly SensorFeed[]> => {
+    feedPromise ??= options.source().catch((error: unknown) => {
       feedPromise = null // allow a retry after a failed load
       throw error
     })
@@ -42,13 +48,13 @@ export function createMockSensorApi(options: MockSensorApiOptions): SensorApi {
 
   return {
     async listSensors(signal) {
-      const feed = await loadFeed(signal)
+      const feed = await abortable(loadFeed(), signal)
       await simulateLatency(latency, random, signal)
       return feed.map(toSensor)
     },
 
     async getLatestReadings(signal) {
-      const feed = await loadFeed(signal)
+      const feed = await abortable(loadFeed(), signal)
       await simulateLatency(latency, random, signal)
 
       sequence += 1
@@ -74,6 +80,17 @@ function toSensor({ id, label, position }: SensorFeed): Sensor {
 function readingAt(series: readonly Reading[], poll: number): Reading | undefined {
   if (series.length === 0) return undefined
   return series[poll % series.length]
+}
+
+/** Resolves with `promise`, or rejects with an AbortError as soon as `signal` aborts. */
+function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise
+  if (signal.aborted) return Promise.reject(abortError())
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(abortError())
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+  })
 }
 
 function simulateLatency(
