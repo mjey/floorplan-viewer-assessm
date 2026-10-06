@@ -1,0 +1,49 @@
+.marker {
+  cursor: pointer;
+  outline: none;
+}
+
+.halo {
+  fill: var(--focus);
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.marker:hover .halo,
+.marker:focus-visible .halo {
+  opacity: 0.35;
+}
+
+.selected .halo {
+  opacity: 0.6;
+}
+
+.disc {
+  stroke: #ffffff;
+  stroke-width: 2;
+  transition: fill 400ms ease-out;
+}
+
+.stale .disc {
+  stroke-dasharray: 4 3;
+  opacity: 0.75;
+}
+
+.value {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #ffffff;
+  pointer-events: none;
+  user-select: none;
+}
+
+.label {
+  font-size: 11px;
+  fill: var(--text);
+  paint-order: stroke;
+  stroke: var(--viewer-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+  user-select: none;
+}

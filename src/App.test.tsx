@@ -93,3 +93,34 @@ describe('App', () => {
     expect(screen.getByTestId('status-bar')).toHaveTextContent('ECONNREFUSED')
   })
 })
+
+describe('App: sensor interaction path', () => {
+  beforeAll(() => stubViewerLayout())
+  afterAll(restoreViewerLayout)
+
+  it('hover shows a tooltip; click pins a detail panel that closes again', async () => {
+    mockFetch(() => new Response(floorplanSource, { status: 200 }))
+    const user = userEvent.setup()
+
+    render(<App sensorApi={instantApi()} />)
+
+    const marker = await screen.findByTestId('sensor-marker-s1')
+    await screen.findByText('Live')
+
+    await user.hover(marker)
+    const tooltip = screen.getByRole('tooltip')
+    expect(tooltip).toHaveTextContent('Aisle A-01')
+    expect(tooltip).toHaveTextContent('20.5 °C')
+    expect(tooltip).toHaveTextContent('45 %')
+
+    await user.click(marker)
+    const detail = screen.getByTestId('sensor-detail')
+    expect(detail).toHaveTextContent('Aisle A-01')
+    expect(detail).toHaveTextContent('20.5 °C')
+    expect(detail).toHaveTextContent('45 %')
+    expect(detail).toHaveTextContent('5200 mm, -2300 mm')
+
+    await user.click(screen.getByRole('button', { name: /close details/i }))
+    expect(screen.queryByTestId('sensor-detail')).not.toBeInTheDocument()
+  })
+})

@@ -28,6 +28,7 @@ Running log of decisions, AI-assist usage, rejected ideas and scope cuts. Folded
 - Step 4 (pan/zoom): Claude drafted the gesture hook, viewport-controls hook, context, toolbar and scale bar plus the interaction tests. The "capture the pointer only after the drag threshold" detail was chosen deliberately so clicks still reach overlay markers (pointer capture would otherwise redirect the click to the viewer).
 - Step 5 (sensors): Claude drafted the `SensorApi` interface, the hand-written JSON validator, the cursor-based mock with injectable latency/failure/random, and the polling reducer hook plus fake-timer tests. The "setTimeout chain, not setInterval" and "keep last snapshot, flag stale" behaviours were deliberate design choices made before the code was written.
 - Step 7 (status/loading/error): done before step 6 at the user's request. Claude drafted the StatusBar, the generic `useAsyncLoad` (extracted from `useDrawing` so the sensor list could reuse it), visibility-based pause, and the App integration tests with an injected scripted `SensorApi`.
+- Step 6 (sensor overlay): Claude drafted `SensorLayer`/`SensorMarker`/`SensorTooltip`/`SensorDetail`, the temperature colour scale and the alignment tests. The key test ("markers stay exactly where the floorplan transform puts them after a pan and a zoom") was specified before the components were written.
 - (append as we go)
 
 ## Rejected / reworked
@@ -42,6 +43,9 @@ Running log of decisions, AI-assist usage, rejected ideas and scope cuts. Folded
 - Step 5: mock feed wraps around when a series ends (only 30 s of data per sensor); documented in the mock's doc comment and the README.
 - Step 7: `App` originally created the mock API internally. Moved construction to `main.tsx` (composition root) and injected `SensorApi` as a prop: App is now testable with a scripted API and knows nothing about the transport (dependency inversion).
 - Step 7: `useDrawing` and the new `useSensors` were near-duplicates; extracted `useAsyncLoad` so both are one-liners.
+- Step 6: considered rendering markers inside the Y-flipped floorplan group (zero extra maths). Rejected: text would render mirrored and marker size would scale with zoom. Screen-space overlay via `useViewport()` + `modelToScreen` instead; the alignment is proven by test rather than by construction.
+- Step 6: hover tooltip is SVG (inside the same surface, no portal, no z-index games); the pinned detail card is HTML outside the SVG because it holds a `<dl>` and a close button. Different tools for different jobs.
+- Step 6: selection state lives in `App`, not in the layer, because the detail card is a sibling of the viewer, not a child of the overlay.
 
 ## Scope cuts
 
