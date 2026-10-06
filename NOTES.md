@@ -26,6 +26,7 @@ Running log of decisions, AI-assist usage, rejected ideas and scope cuts. Folded
 - Step 2 (geometry): drafted the pure viewport/bounds functions and their tests with Claude; reviewed the zoom-about-cursor derivation by hand (tx = anchor.x - m.x*s, ty = anchor.y + m.y*s because of the Y flip).
 - Step 3 (DXF): Claude probed dxf-parser's output (radians for arcs, `shape` flag for closed polylines, numeric `$INSUNITS`) before writing the normaliser, and drafted the unit heuristic + SVG arc conversion. The sweep-flag reasoning (CCW in model space stays sweep=1 inside the Y-flipped group) was checked by hand.
 - Step 4 (pan/zoom): Claude drafted the gesture hook, viewport-controls hook, context, toolbar and scale bar plus the interaction tests. The "capture the pointer only after the drag threshold" detail was chosen deliberately so clicks still reach overlay markers (pointer capture would otherwise redirect the click to the viewer).
+- Step 5 (sensors): Claude drafted the `SensorApi` interface, the hand-written JSON validator, the cursor-based mock with injectable latency/failure/random, and the polling reducer hook plus fake-timer tests. The "setTimeout chain, not setInterval" and "keep last snapshot, flag stale" behaviours were deliberate design choices made before the code was written.
 - (append as we go)
 
 ## Rejected / reworked
@@ -35,6 +36,9 @@ Running log of decisions, AI-assist usage, rejected ideas and scope cuts. Folded
 - Step 4: React's synthetic `onWheel` is registered passive, so `preventDefault()` is ignored and the page scrolls while zooming. Reworked to a native non-passive listener attached in an effect.
 - Step 4: a `useCallback` that read `ref.current` tripped the React Compiler memoisation lint. Replaced with a plain helper that takes the element from the event instead of the ref.
 - Step 4: split `ViewportContext` (context + hook) from `ViewportProvider` (component) so Fast Refresh works; moved the scale-bar maths to its own module for the same reason, which also made it trivially testable.
+- Step 5: the first `refresh()` implementation bumped a counter the polling effect did not depend on, so it did nothing. Caught by the `refresh() polls immediately` test. Fixed by making the counter an effect dependency, which also made a separate "generation" ref redundant (the AbortController already guards late responses).
+- Step 5: considered TanStack Query for polling. Rejected: it would hide exactly the update cycle, stale handling and overlap-avoidance the brief wants to see, and adds a dependency for one hook.
+- Step 5: mock feed wraps around when a series ends (only 30 s of data per sensor); documented in the mock's doc comment and the README.
 
 ## Scope cuts
 
