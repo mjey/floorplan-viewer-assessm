@@ -1,0 +1,50 @@
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.main {
+  position: relative;
+  min-height: 0;
+}
+
+.status {
+  display: grid;
+  place-items: center;
+  gap: 0.5rem;
+  height: 100%;
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.warnings {
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+
+.warnings p {
+  margin: 0;
+}

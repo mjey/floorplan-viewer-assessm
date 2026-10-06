@@ -1,0 +1,13 @@
+.lines {
+  fill: none;
+  stroke: var(--floorplan-stroke);
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.zone {
+  fill: var(--floorplan-zone-fill);
+  stroke: none;
+}

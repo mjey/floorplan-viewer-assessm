@@ -7,6 +7,26 @@
     sans-serif;
   line-height: 1.5;
   color-scheme: light dark;
+
+  --bg: #f5f6f8;
+  --text: #1a1d21;
+  --text-muted: #5f6873;
+  --border: #d9dde3;
+  --viewer-bg: #ffffff;
+  --floorplan-stroke: #3a4149;
+  --floorplan-zone-fill: rgba(70, 130, 255, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181c;
+    --text: #e6e8eb;
+    --text-muted: #9aa3ad;
+    --border: #2a3038;
+    --viewer-bg: #1b1f24;
+    --floorplan-stroke: #c7ccd2;
+    --floorplan-zone-fill: rgba(90, 150, 255, 0.12);
+  }
 }
 
 *,
@@ -23,13 +43,6 @@ body,
 }
 
 body {
-  background: #f5f6f8;
-  color: #1a1d21;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #15181c;
-    color: #e6e8eb;
-  }
+  background: var(--bg);
+  color: var(--text);
 }

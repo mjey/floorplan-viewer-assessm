@@ -10,6 +10,7 @@ Running log of decisions, AI-assist usage, rejected ideas and scope cuts. Folded
 - BLOCKS section has ~3.5k entities but zero INSERT references. Orphaned; ignored.
 - 96 arcs have radius 0.005 (5 mm detail), 6 arcs radius 0.9 (door swings). Non-scaling stroke keeps them visible.
 - No TEXT/MTEXT/dimensions.
+- Aisle C sensors (x = 12 800) sit OUTSIDE the `h01_z01` zone polyline (which ends at x ≈ 12 245) but inside the overall drawing. The zone is a sub-area, not the hall boundary. Found via a failing test in step 3.
 
 ## Decisions
 
@@ -23,11 +24,13 @@ Running log of decisions, AI-assist usage, rejected ideas and scope cuts. Folded
 
 - Claude Code used to inspect the DXF structure (awk over sections), scaffold, and pair on implementation step by step.
 - Step 2 (geometry): drafted the pure viewport/bounds functions and their tests with Claude; reviewed the zoom-about-cursor derivation by hand (tx = anchor.x - m.x*s, ty = anchor.y + m.y*s because of the Y flip).
+- Step 3 (DXF): Claude probed dxf-parser's output (radians for arcs, `shape` flag for closed polylines, numeric `$INSUNITS`) before writing the normaliser, and drafted the unit heuristic + SVG arc conversion. The sweep-flag reasoning (CCW in model space stays sweep=1 inside the Y-flipped group) was checked by hand.
 - (append as we go)
 
 ## Rejected / reworked
 
-- (append as we go)
+- Step 3: first drafts of `useDrawing` and `FloorplanViewer` called `setState` synchronously inside `useEffect` (set loading / fit on resize). Lint flagged it; reworked both to _derive_ state instead: the load state is derived from a settled result tagged with (url, attempt), and the viewport is derived from `fitBounds` until the user interacts. Fewer renders, no effect-reset dance.
+- Step 3: a test asserted all sensors lie inside the zone polyline. It failed because aisle C is outside the zone. Kept the finding, fixed the assumption.
 
 ## Scope cuts
 
