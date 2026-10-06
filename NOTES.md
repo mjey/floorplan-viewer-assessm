@@ -22,6 +22,7 @@ Running log of decisions, AI-assist usage, rejected ideas and scope cuts. Folded
 ## AI assistant usage
 
 - Claude Code used to inspect the DXF structure (awk over sections), scaffold, and pair on implementation step by step.
+- Step 2 (geometry): drafted the pure viewport/bounds functions and their tests with Claude; reviewed the zoom-about-cursor derivation by hand (tx = anchor.x - m.x*s, ty = anchor.y + m.y*s because of the Y flip).
 - (append as we go)
 
 ## Rejected / reworked
