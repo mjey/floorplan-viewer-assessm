@@ -2,97 +2,58 @@
 
 OctaiPipe frontend take-home, Assessment 1 (DXF Viewer).
 
-A React + TypeScript app that renders a data-hall floorplan from a DXF file, lets you pan and zoom around it, and overlays live sensor readings at their physical positions. Readings are polled from a mocked API every 5 seconds; the UI makes it obvious when they are live, stale or missing.
+A React + TypeScript app that draws the data hall from `floorplan.dxf`, lets you pan and zoom around it, and places the sensors from `sensors.json` on top with their live temperature and humidity. Readings come from a mocked API that is polled every 5 seconds.
 
 ![Floorplan with six sensor markers](docs/screenshot.png)
 
 ## Running it
 
-Requires Node 20.19 or newer (22.12+ recommended), which is what Vite 8 supports.
+Needs Node 20.19 or newer (Vite 8).
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
-npm test           # unit + component tests (Vitest, jsdom)
-npm run build      # type-check and production build into dist/
-npm run preview    # serve dist/
-npm run lint       # oxlint
-npm run typecheck  # tsc -b
-npm run format     # prettier
+npm run dev      # http://localhost:5173
+npm test         # Vitest
+npm run build    # type-check and production build
+npm run lint
 ```
 
-The floorplan (`public/floorplan.dxf`) and sensor feed (`public/sensors.json`) are fetched at runtime rather than imported, so the loading and failure paths are real.
+The loading and failure states are hard to catch with a fast mock, so you can force them from the URL:
 
-## What it does
+- `?latency=2000-3000` makes every poll slow, so you can see "Connecting"
+- `?failEvery=2` fails every second poll (Stale, last values kept)
+- `?failEvery=1` fails every poll (Offline, with a retry button)
 
-| Brief                                                                    | Where                                                                                                                                     |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Renders the floorplan from the DXF                                       | `src/dxf/` parses and normalises it, `src/viewer/FloorplanLayer.tsx` draws it as SVG paths                                                |
-| Pan and zoom                                                             | `src/viewer/usePanZoom.ts`: drag, wheel about the cursor, double-click, `+` `-` `0` and arrow keys, toolbar, fit-to-view                  |
-| Sensors overlaid at their model-space positions with current temperature | `src/overlays/sensors/SensorLayer.tsx`                                                                                                    |
-| Detail on interaction                                                    | hover or focus shows a tooltip; click or Enter pins a detail card with label, temperature, humidity, reading time and position            |
-| Live data from a polled API                                              | `src/sensors/`: a `SensorApi` interface, a mock that walks the recorded series, and `usePolledReadings` with live, stale and error states |
+These only configure the mock in `main.tsx`. The rest of the app doesn't know they exist.
 
-Also there: a scale bar, a status bar with the age of the last successful poll, polling paused in hidden tabs, retry buttons on every failure, and a footer listing anything the DXF normaliser had to skip or guess.
-
-## Architecture
+## How it fits together
 
 ```
 src/
-  geometry/   Pure maths. Viewport, modelToScreen/screenToModel, zoomAt, fitBounds, bounds.
-  dxf/        DXF -> Drawing. Parser wrapper, normaliser, unit heuristic, SVG path data.
-  viewer/     The map surface. Viewport state, gestures, controls, scale bar, overlay context.
-  overlays/   Things drawn on top of the map. Currently only sensors.
-  sensors/    Sensor domain and data. Types, SensorApi interface, mock, validator, polling hook.
-  ui/         App-level chrome (status bar).
-  lib/        Small generic hooks and helpers (async load, relative time, visibility).
-  App.tsx     Composes the above. main.tsx is the composition root that builds the SensorApi.
+  geometry/   pure maths: the viewport, model <-> screen conversion, fit and zoom
+  dxf/        DXF file -> Drawing in millimetres (parser wrapper, normaliser, unit check)
+  viewer/     the map: viewport state, pan/zoom gestures, SVG surface, controls
+  overlays/   things drawn on the map, currently the sensor markers, tooltip and detail card
+  sensors/    the SensorApi interface, the mock, validation and the polling hook
+  ui/, lib/   status bar and small helpers
 ```
 
-The dependency direction is one way: `geometry` knows nothing; `dxf` and `sensors` depend on `geometry`; `viewer` depends on `geometry` and `dxf`; `overlays` depend on `viewer` and `sensors`; `App` depends on everything. Nothing below `App` knows where readings come from.
+Dependencies only point one way. `geometry` knows nothing about the app, the viewer knows nothing about sensors, and `main.tsx` is the only file that knows the readings come from a mock.
 
 ### Coordinate space
 
-There are exactly two spaces and one mapping between them.
-
-- Model space: the floorplan's own coordinates in millimetres, Y up (CAD convention). DXF geometry and `sensors.json` positions both live here.
-- Screen space: CSS pixels relative to the viewer element, Y down.
-
-The mapping is a `Viewport` of three numbers, `{ scale, tx, ty }`, and two pure functions in `src/geometry/viewport.ts`:
+Model space is the drawing in millimetres with Y up. Screen space is pixels with Y down. The mapping between them is a viewport of three numbers, `{ scale, tx, ty }`:
 
 ```
 screen.x =  model.x * scale + tx
 screen.y = -model.y * scale + ty
 ```
 
-Everything that draws uses this one mapping:
+The floorplan is drawn in model coordinates inside a single `<g transform="matrix(s 0 0 -s tx ty)">`, so panning and zooming only change one attribute. Sensor markers are drawn in screen space with `modelToScreen` using the same viewport. That keeps them a constant size with readable text, and they can't drift away from the floorplan because both come from the same three numbers. Zooming keeps the point under the cursor where it is.
 
-- The floorplan is drawn in model coordinates inside a single `<g transform="matrix(s 0 0 -s tx ty)">`. Pan and zoom change one attribute; path data is computed once per drawing. Strokes use `vector-effect: non-scaling-stroke` so line weight is constant at any zoom.
-- Overlays draw in screen space. They read the live viewport from context with `useViewport()` and convert their model positions with `modelToScreen`. Markers therefore stay a constant size and keep crisp text, and the alignment with the floorplan is guaranteed because both derive from the same `Viewport`.
+### Live data
 
-`zoomAt` keeps the model point under the cursor fixed, clamps to limits, and returns the same object when nothing changes. `fitBounds` is degenerate-safe: empty bounds, a zero-size viewer or a single point all produce a finite viewport.
-
-Tests cover the Y flip direction, round trips, cursor-fixed zoom in and out, the SVG matrix agreeing with `modelToScreen`, and, in `SensorLayer.test.tsx`, that every marker coincides with the floorplan transform before and after a pan and a wheel zoom.
-
-### The DXF, and what was untidy about it
-
-The brief says the file is "not perfectly tidy". Findings, all handled in `src/dxf/normalise.ts` and reported in the UI footer rather than silently fixed:
-
-| Finding                                                                                                                                                                    | Handling                                                                                                                                                                                                                                                                                                                                                                                           |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The header declares millimetres (`$INSUNITS = 4`) but the geometry spans x 3.8 to 14.1, y -3.5 to 4.7. That is metres. `sensors.json` is in millimetres (x 5200 to 12800). | `resolveUnitScale` treats the header as a claim and checks it against the drawing extent. An extent under 1 m or over 2 km is implausible for a building, so it tries metres, millimetres, centimetres, inches and feet in that order and picks the first plausible one. Here that scales the drawing by 1000. The decision and reason are shown in the footer. An explicit override is available. |
-| DXF is Y-up, the screen is Y-down.                                                                                                                                         | Flipped once, in the viewport matrix.                                                                                                                                                                                                                                                                                                                                                              |
-| The ENTITIES section holds 849 LINEs and 102 ARCs on layer `0`, plus one closed LWPOLYLINE on layer `h01_z01`.                                                             | Lines, arcs, circles and polylines are supported. Closed polylines are tinted as zones.                                                                                                                                                                                                                                                                                                            |
-| The BLOCKS section holds about 3,500 entities, but there are zero INSERT references.                                                                                       | Blocks are ignored. An INSERT, if one appeared, is reported as skipped rather than dropped silently.                                                                                                                                                                                                                                                                                               |
-| 96 arcs have a 5 mm radius (hinge detail); 6 have a 0.9 m radius (door swings).                                                                                            | Non-scaling strokes keep both visible.                                                                                                                                                                                                                                                                                                                                                             |
-| The aisle C sensors (x = 12800) sit outside the `h01_z01` polyline, which ends near x = 12245, but inside the drawing.                                                     | The zone is a sub-area, not the hall boundary. Found by a test that assumed otherwise and failed.                                                                                                                                                                                                                                                                                                  |
-| Polyline bulges (arc segments) are not present in this file.                                                                                                               | If they were, they would be flattened to straight edges and counted in the warnings.                                                                                                                                                                                                                                                                                                               |
-
-Arcs are emitted as SVG arc commands in model space. Because the floorplan group applies a reflection, a counter-clockwise DXF arc keeps `sweep-flag = 1` and renders the right way round. This is covered by tests with explicit expected path strings.
-
-### Data layer and the update cycle
-
-`SensorApi` is the only thing the UI depends on:
+The UI only depends on this interface:
 
 ```ts
 interface SensorApi {
@@ -101,22 +62,15 @@ interface SensorApi {
 }
 ```
 
-`Sensor` is static placement data (id, label, position). `Reading` is what changes. The overlay joins the two by id at render time, so a sensor with no reading yet still appears, marked "no data".
+The mock loads `sensors.json` once and returns the next reading for every sensor on each call, with random latency and a failure every 7th call. The series is only 30 seconds long, so it wraps around and shifts the timestamps forward so time doesn't jump back. Polling goes through the interface rather than HTTP, which is why the Network tab only shows the one `sensors.json` request.
 
-`createMockSensorApi` implements the interface over `sensors.json`. Each poll answers with the next reading of every sensor, with randomised latency and a failure injected every 7th call (`MOCK_FAIL_EVERY` in `src/config.ts`) so the stale state is visible in a demo. When a series runs out it wraps around: the file holds 30 seconds of data per sensor and a feed that stopped after six polls would hide the behaviour this app exists to show. Each pass shifts the timestamps forward by one series period, so the reading time keeps advancing instead of jumping back to the first timestamp.
+`usePolledReadings` uses a `setTimeout` chain instead of `setInterval`, so a slow response never overlaps the next poll. It has four states: loading, live, stale (the last poll failed and the previous values are kept) and error (nothing to show yet). Staleness is tracked per sensor, so a sensor missing from a poll keeps its last value with a dashed marker instead of disappearing. Polling pauses while the tab is hidden.
 
-`usePolledReadings` drives it:
+Sensor placement (id, label, position) and readings are separate, and the overlay joins them by id when it renders.
 
-- A `setTimeout` chain, not `setInterval`. The next poll is armed only after the previous one settles, so a slow response never overlaps the next request.
-- Four explicit states. `loading` before the first result, `live` after a success, `stale` when the latest poll failed but an earlier snapshot is still shown, `error` when there is nothing to show.
-- Readings are kept per sensor across polls and failures, each with its own stale flag (`src/sensors/readingsState.ts`). A sensor that drops out of one poll stays on the map with its last value and a dashed marker; a failed poll marks everything stale. An operator wants the last known values, clearly flagged, not a blank map or a vanishing sensor.
-- Pause via `enabled` (used when the tab is hidden) and `refresh()` for an immediate poll. Aborts on unmount, and a poll cut short by a pause clears the in-flight flag so the refresh button does not stay disabled.
+### Adding an overlay
 
-The status bar reports the state, the age of the last successful poll, the failure reason, and offers a refresh.
-
-### Adding another overlay
-
-An overlay is a component rendered as a child of `FloorplanViewer`. It takes its own data as props and reads the mapping from context:
+An overlay is a child of `FloorplanViewer` that reads the viewport from context:
 
 ```tsx
 function CracUnitsLayer({ units }: { units: readonly CracUnit[] }) {
@@ -130,131 +84,55 @@ function CracUnitsLayer({ units }: { units: readonly CracUnit[] }) {
     </g>
   )
 }
-
-<FloorplanViewer drawing={drawing}>
-  <SensorLayer ... />
-  <CracUnitsLayer units={units} />
-</FloorplanViewer>
 ```
 
-Nothing in the viewer or the sensor layer changes. `SensorLayer.tsx` is the worked example.
-
-### Moving the camera
-
-The viewport is owned by the viewer, so two routes exist for moving it:
-
-- Inside the viewer, an overlay reads `controls` from `useViewport()` and calls `centerOn`, `zoomBy`, `fit` or `update`.
-- Outside the viewer, a parent passes a `ref` and receives the same controls as a `FloorplanViewerHandle`. The detail card's "Locate on map" button works this way: `App` calls `centerOn(sensor.position, scale)` on the handle.
-
-### Swapping the transport
-
-Implement `SensorApi` over a real endpoint and construct it in `main.tsx` instead of the mock. `App` takes the API as a prop and the tests already exercise it with a scripted implementation.
+Nothing in the viewer or the sensor layer has to change. To move the camera from outside the viewer, pass a `ref` to `FloorplanViewer` and call `centerOn`. The "Locate on map" button in the detail card works that way.
 
 ## Decisions and trade-offs
 
-- **dxf-parser plus my own normaliser**, not a drop-in viewer. `dxf-viewer` brings three.js and owns the camera; placing sensors accurately would mean fighting it. The coordinate space is the thing being assessed, so the app owns it. The parser is wrapped in one file so it can be swapped.
-- **Hand-rolled pan and zoom**, not d3-zoom. About 150 lines, with a pure `zoomAt` that is unit-tested. d3-zoom would hide the maths and be harder to extend in a live session.
-- **Hand-rolled polling**, not TanStack Query. The update cycle, stale handling and overlap avoidance are what the brief asks to see; a library would hide them behind options.
-- **SVG, not canvas.** Under a thousand entities and six markers. SVG gives free hit-testing, accessibility roles and CSS, and one `<path>` per layer keeps the DOM small. Canvas would be the move at tens of thousands of entities.
-- **Floorplan in a transformed group, overlays in screen space.** Markers inside the flipped group would render mirrored text and scale with zoom. The cost is one `modelToScreen` call per marker per frame, which is nothing.
-- **Pointer capture only after a 4 px drag threshold.** Capturing on pointer down would retarget the click to the viewer and markers would never receive it.
-- **Derived state over effects.** The viewport is a pure fit until the user interacts; the load state is derived from a settled result tagged with its request. No `setState` inside effects, no reset dance when the drawing changes, and stale responses are ignored for free.
-- **Dependency injection at the root.** `main.tsx` is the only file that knows readings come from a mocked JSON file.
-- **Runtime validation of `sensors.json`** with path-qualified errors (`[2].readings[0].temperatureC must be a finite number`). Hand-written because the shape is tiny; a schema library would be the choice if it grew.
+- `dxf-parser` with my own normaliser, instead of a complete viewer like `dxf-viewer`. That one brings three.js and owns the camera, and placing sensors accurately on top would have meant fighting it.
+- Pan/zoom and polling written by hand rather than with d3-zoom or TanStack Query. Both are small here, and they are the parts the brief asks about, so I didn't want them hidden behind a library's options.
+- SVG rather than canvas. Around 950 entities and six markers is easy for SVG, and it gives me hit-testing, focus and CSS for free. At tens of thousands of entities I'd move to canvas or WebGL and keep the same viewport maths.
+- Pointer capture starts only after a 4 px drag. Capturing on pointer down would swallow clicks meant for the markers.
+- State is derived where possible (the fitted viewport, load states) instead of being synced in effects.
+- `sensors.json` is validated at runtime with small hand-written checks and readable errors such as `[2].readings[0].temperatureC must be a finite number`. A schema library felt like too much for a shape this small.
 
 ## Tests
 
-116 tests across 17 files. They target the three things the brief names and little else.
+Run with `npm test`. I aimed them at the three areas the brief mentions:
 
-| Area                       | What is proved                                                                                                                                                                                                                                |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Model-to-screen            | Y flip direction, round trips with real sensor coordinates, cursor-fixed zoom in and out, zoom then inverse zoom is stable, clamping, fit keeps every corner inside the padding and centres the content, SVG matrix agrees with the function. |
-| Markers under pan and zoom | Every marker coincides with the floorplan group's own transform matrix before and after a drag and a wheel zoom, through the real viewer component.                                                                                           |
-| DXF handling               | Unit heuristic cases, arc, circle and polyline path strings, arc bounds through axis extremes, normaliser warnings for skipped and flattened entities, and the real `floorplan.dxf` (952 entities, metres corrected, zone geometry).          |
-| Polling                    | First poll, interval advance, failure keeps the snapshot and reports stale then recovers, first-poll error, no overlapping requests, unmount, pause and resume, refresh. Fake timers throughout.                                              |
-| Mock API                   | One reading per poll, wrap-around with monotonic timestamps, shared source load with retry, every-Nth failure, latency timing, abort.                                                                                                         |
-| User interaction           | Hover shows the tooltip with label, temperature and humidity; click pins the detail card; close removes it. Also drag pans by the exact delta, a sub-threshold press does not pan, a marker click does not pan, toolbar and keyboard fit.     |
-| States                     | Status bar wording for live, stale, offline and paused; app-level floorplan error, sensor-list error with retry recovering, readings offline.                                                                                                 |
+- Coordinate conversion: the Y flip, round trips, zoom about the cursor, fit, the SVG matrix agreeing with `modelToScreen`, and markers staying on the floorplan after a real drag and wheel zoom.
+- Polling: the interval, no overlapping requests, failures keeping values and recovering, pause, refresh and unmount, all with fake timers.
+- A user path: hovering shows the tooltip, clicking pins the detail card, closing removes it.
 
-Run with `npm test`.
+There are also a few for the DXF handling (unit check, arc paths, the real file) and the mock.
 
-### Manual test checklist
+## How I used AI
 
-Each line maps to a requirement in the brief. Start with `npm run dev` and open http://localhost:5173.
+I used Claude Code for most of the drafting. Before any code I read the brief, looked through the DXF with shell tools (that's how I found the unit mismatch and the unused blocks) and settled on the structure. After that I built it one step at a time: draft with the assistant, review it, run typecheck, lint and tests.
 
-| Requirement                | How to check                                                                                            | Expected                                                                                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Renders the floorplan      | Load the page                                                                                           | Walls, two door swings, two rack rows and a tinted zone; footer says the units were corrected from millimetres to metres                              |
-| Pan                        | Drag anywhere on the map; arrow keys when the map is focused                                            | Floorplan and markers move together; the Fit button becomes enabled                                                                                   |
-| Zoom                       | Wheel over a marker; `+` / `-`; double-click                                                            | The point under the cursor stays put; markers keep their size; the scale bar relabels                                                                 |
-| Fit                        | Click the fit button or press `0`                                                                       | The whole hall is centred with a margin; the button disables again                                                                                    |
-| Sensors at model positions | Compare markers with `public/sensors.json`                                                              | A column at the left, B in the middle, C at the right; the lower row is y = -2300, the upper row y = 3200                                             |
-| Current temperature shown  | Read the markers                                                                                        | Value inside each disc; colour runs blue to red from 18 to 30 °C                                                                                      |
-| Detail on hover            | Hover or Tab to a marker                                                                                | Tooltip with label, temperature, humidity and reading time; flips at the edges                                                                        |
-| Detail on click            | Click a marker or press Enter on it                                                                     | Card with label, temperature, humidity, time, position and id; Escape or the close button dismisses it; clicking the same marker again toggles it off |
-| Live updates               | Watch for 30 s                                                                                          | Values change every 5 s and wrap after six readings; "updated N s ago" ticks                                                                          |
-| Polled API structure       | Open DevTools, Network                                                                                  | `sensors.json` is fetched once; readings come from the `SensorApi` mock, which is the only transport the app knows                                    |
-| Loading state              | Open `?latency=2000-3000`                                                                               | Status shows Connecting with a pulsing dot until the first poll lands                                                                                 |
-| Slow poll                  | Same URL, keep watching                                                                                 | The dot pulses during each poll; no overlapping requests, the next poll is armed only after the previous settles                                      |
-| Failure keeps last values  | Open `?failEvery=2`                                                                                     | Every second poll turns the status to Stale, every marker goes dashed, the card says "showing last known values"; the next poll returns to Live       |
-| One sensor drops out       | Not reachable with the mock; covered by the polling hook test "keeps a sensor that drops out of a poll" | That sensor alone stays on the map with its last value and a dashed marker, the tooltip says "(stale)", the others stay live                          |
-| Total failure              | Stop the dev server, or open `?failEvery=1`                                                             | Status shows Offline with the reason; the refresh button retries                                                                                      |
-| Floorplan failure          | Rename `public/floorplan.dxf` and reload                                                                | An error with a Retry button; restore the file and retry                                                                                              |
-| Sensor list failure        | Break the JSON (remove an `id`) and reload                                                              | A notice naming the bad path, e.g. `[0].id must be a non-empty string`; Retry recovers once fixed                                                     |
-| Dev-mode double mount      | Default URL with React StrictMode (always on in `main.tsx`)                                             | Reaches Live every time; a cancelled `sensors.json` request from the throwaway mount is expected and harmless                                         |
-| Background tab             | Switch tabs for a while and come back                                                                   | Status shows Paused while hidden; polling resumes immediately on return                                                                               |
+What I rejected or reworked:
 
-## How I used AI assistants
-
-I worked with Claude Code throughout, in a plan-first, step-by-step loop. The plan came first: read both briefs, inspect the DXF with shell tools (that is how the units mismatch and the orphaned blocks were found before any code existed), decide the architecture and the time boxes. Then each step was drafted with the assistant, reviewed in the editor, run through typecheck, lint and tests, verified in a headless browser screenshot of the production build, and committed as one commit. The git history is that sequence.
-
-Things the assistant produced that I rejected or reworked:
-
-- First drafts of the drawing hook and the viewer called `setState` synchronously inside `useEffect` to set loading and to refit on resize. The linter flagged it. Both were reworked to derive state instead; the result has fewer renders and no reset logic.
-- The first generic async-load hook took a dependency list and spread it into the effect, silenced with a lint directive. Removing the directive showed the rule had been suppressed. It now takes a memoised loader as its single dependency.
-- `refresh()` on the polling hook initially bumped a counter the effect did not depend on, so it did nothing. The hook's own test caught it. The fix also removed a redundant generation ref, since the `AbortController` already guards late responses.
-- React's synthetic `onWheel` is passive, so the page scrolled while zooming. Reworked to a native non-passive listener.
-- A `useCallback` reading `ref.current` tripped the React Compiler lint. Replaced with a plain helper that takes the element from the event.
-- The context file mixed a component with a hook, which breaks Fast Refresh. Split into `ViewportContext.ts` and `ViewportProvider.tsx`; the scale-bar maths moved to its own module for the same reason and became trivially testable.
-- A test asserted every sensor lies inside the zone polyline. It failed because aisle C does not. The finding was kept and the assumption fixed.
-- The app originally constructed the mock API itself. Moved to `main.tsx` and injected, which is what made the app testable with a scripted API.
-- Rendering markers inside the flipped floorplan group was considered for its zero extra maths and rejected for mirrored text and zoom-scaled markers.
-- Found in manual testing after the README was first written: in the dev server the status sometimes stuck on Connecting with a cancelled request for `sensors.json`. Cause: React StrictMode mounts, unmounts and remounts in development; the mock cached its one feed load bound to the first caller's abort signal, so the throwaway mount's abort cancelled the load for the real mount, and both hooks then swallowed the resulting AbortError as if it were their own. Fixed in three places, each with a test that failed first: the shared load is no longer tied to any caller's signal, and both hooks silence an AbortError only when their own controller aborted. The same change also fixed a latent case where a late response from a superseded load could knock the async-load hook back to loading.
-- A review pass over the first complete draft listed five limitations. Four became fixes, each test-first: staleness is now tracked per sensor so a sensor that drops out of a poll stays on the map marked stale instead of vanishing; the mock's timestamps keep advancing across wrap-around instead of jumping back; a poll cut short by a pause now clears the in-flight flag so the refresh button is not left disabled; and the camera is reachable from outside the viewer through a `ref` handle (and from overlays through context), which is what the detail card's "Locate on map" uses. The fifth, scaling to tens of thousands of entities, is recorded under what I would do next.
-
-Decisions made deliberately before code was written, rather than accepted from a draft: the `setTimeout` chain, keeping the last snapshot and flagging it stale, capturing the pointer only after the drag threshold, and specifying the marker alignment test before the overlay components existed.
+- Early drafts set state inside `useEffect` for loading and refitting. The linter flagged it and I changed both to derived state.
+- `refresh()` on the polling hook bumped a counter the effect didn't depend on, so it did nothing. Its test caught that.
+- React's `onWheel` is passive, so the page scrolled while zooming. I moved to a native non-passive listener.
+- It suggested drawing the markers inside the flipped floorplan group. I didn't, because the text comes out mirrored and the markers grow with zoom.
+- In dev, React StrictMode's throwaway first mount aborted the shared `sensors.json` load for the real mount, and the status got stuck on "Connecting". I untied the shared load from any single caller's abort signal, with a test that failed first.
+- A review pass over the finished version led to four more fixes: per-sensor staleness, timestamps going backwards on wrap-around, the refresh button staying disabled after a pause, and no way to move the camera from outside the viewer.
 
 ## Scope cuts
 
-- No layer toggles or minimap. The layers exist in the `Drawing` model, so a toggle is a filter on `drawing.layers` and a checkbox.
-- No touch pinch-zoom. Mouse and trackpad wheel only; single-finger drag works through pointer events.
-- Block definitions are ignored, because nothing references them. INSERT support would mean applying each block's base point, scale and rotation to its entities.
-- Polyline bulges are flattened. None exist in this file.
-- No per-sensor history. The data is there (the mock keeps the series) but the UI shows only the latest reading.
-- No real transport. The interface is there; the implementation is a mock.
-- Styling is deliberately plain. The brief asked for interaction quality over polish.
+- No layer toggles, minimap or touch pinch-zoom.
+- No INSERT or polyline bulge support. This file uses neither.
+- No reading history. The UI only shows the latest value.
+- No real backend, just the interface and the mock.
+- Plain styling, since the brief put interaction quality first.
 
-## What I would do next
+## What I'd do next
 
-1. **Threshold alerting.** Colour is informative but not actionable. Add configurable warning and critical bands, change marker shape (not just colour) when breached, and list breaches in the status bar.
-2. **A sparkline in the detail card** from the readings the polling hook has already seen, with a ring buffer per sensor.
-3. **Layer panel** with per-layer visibility and the entity counts the normaliser already computes.
-4. **INSERT and bulge support** in the normaliser, with tests against a second, messier DXF. The warnings list already tells you when you need it.
-5. **Spatial join to zones.** The zone polyline is parsed; a point-in-polygon check would let the app report which zone each sensor is in and aggregate per zone.
-6. **Transport.** A `FetchSensorApi` against a real endpoint, plus `ETag` handling so unchanged polls are cheap, and WebSocket push behind the same interface.
-7. **Viewport constraints** so the drawing cannot be panned entirely off-screen, and a URL-encoded viewport for shareable views.
-8. **Pinch and touch** gestures, and `ResizeObserver` debouncing on very frequent resizes.
-9. **Scaling up.** SVG is right for 952 entities and 6 sensors. At tens of thousands of entities the floorplan moves to canvas or WebGL with the same `Viewport` maths, markers get a spatial index for hit-testing and cluster at low zoom, and the `Drawing` is tiled or simplified by zoom level.
-
-## Configuration
-
-All tunables are in `src/config.ts`: asset URLs, the 5-second poll interval, the mock latency range and failure cadence, and the fit padding.
-
-For manual testing of the slow, failing and recovering states, two query parameters override the mock per page load:
-
-| Parameter         | Effect                                                  | Example                                    |
-| ----------------- | ------------------------------------------------------- | ------------------------------------------ |
-| `failEvery=N`     | reject every Nth poll; `0` disables failures            | `http://localhost:5173/?failEvery=2`       |
-| `latency=MIN-MAX` | simulated latency range in ms; a single number fixes it | `http://localhost:5173/?latency=2000-3000` |
-
-They are parsed in `src/demoOptions.ts` and applied in `main.tsx`; the rest of the app is unaware of them. Zoom limits are in `src/geometry/viewport.ts`; the temperature colour range is in `src/overlays/sensors/temperatureScale.ts`.
+1. Warning and critical thresholds that change the marker's shape as well as its colour, with a count in the status bar.
+2. A small sparkline in the detail card, built from readings the app has already polled.
+3. A point-in-polygon check to work out which zone each sensor is in, and per-zone averages.
+4. A real `FetchSensorApi` with ETags so unchanged polls are cheap, and possibly WebSocket push behind the same interface.
+5. Layer toggles and INSERT/bulge support, tested against a messier DXF.
+6. Touch gestures, and limits so the drawing can't be panned completely off screen.
