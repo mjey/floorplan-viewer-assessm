@@ -1,12 +1,18 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 
-import { FLOORPLAN_URL, POLL_INTERVAL_MS } from '@/config'
+import { FLOORPLAN_URL, LOCATE_MIN_SCALE, POLL_INTERVAL_MS } from '@/config'
 import { useDrawing } from '@/dxf'
 import { useDocumentVisibility } from '@/lib/useDocumentVisibility'
 import { SensorDetail, SensorLayer } from '@/overlays/sensors'
-import { usePolledReadings, useSensors, type SensorApi, type SensorId } from '@/sensors'
+import {
+  usePolledReadings,
+  useSensors,
+  type Sensor,
+  type SensorApi,
+  type SensorId,
+} from '@/sensors'
 import { StatusBar } from '@/ui/StatusBar'
-import { FloorplanViewer } from '@/viewer'
+import { FloorplanViewer, type FloorplanViewerHandle } from '@/viewer'
 
 import styles from './App.module.css'
 
@@ -23,10 +29,15 @@ export function App({ sensorApi }: AppProps) {
   const [selectedId, setSelectedId] = useState<SensorId | null>(null)
   const clearSelection = useCallback(() => setSelectedId(null), [])
 
+  const viewer = useRef<FloorplanViewerHandle>(null)
+  const locate = useCallback((sensor: Sensor) => {
+    const camera = viewer.current
+    if (!camera) return
+    camera.centerOn(sensor.position, Math.max(camera.viewport.scale, LOCATE_MIN_SCALE))
+  }, [])
+
   const sensorList = sensors.state.status === 'success' ? sensors.state.data : null
   const selectedSensor = sensorList?.find((s) => s.id === selectedId) ?? null
-  const latest = readings.snapshot?.readings ?? null
-  const stale = readings.status === 'stale'
 
   return (
     <div className={styles.app}>
@@ -56,12 +67,11 @@ export function App({ sensorApi }: AppProps) {
           </div>
         )}
         {drawing.state.status === 'success' && (
-          <FloorplanViewer drawing={drawing.state.data}>
+          <FloorplanViewer drawing={drawing.state.data} ref={viewer}>
             {sensorList && (
               <SensorLayer
                 sensors={sensorList}
-                readings={latest}
-                stale={stale}
+                readings={readings.readings}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
               />
@@ -81,9 +91,9 @@ export function App({ sensorApi }: AppProps) {
         {selectedSensor && (
           <SensorDetail
             sensor={selectedSensor}
-            reading={latest?.get(selectedSensor.id)}
-            stale={stale}
+            entry={readings.readings.get(selectedSensor.id)}
             onClose={clearSelection}
+            onLocate={() => locate(selectedSensor)}
           />
         )}
       </main>

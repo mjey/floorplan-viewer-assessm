@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import {
+  DEFAULT_ZOOM_LIMITS,
   fitBounds,
   zoomAt,
   type Bounds,
+  type ModelPoint,
   type ScreenPoint,
   type Size,
   type Viewport,
@@ -17,6 +19,8 @@ export interface ViewportControls {
   readonly update: (transform: (current: Viewport) => Viewport) => void
   /** Zooms by `factor` about `anchor`, or about the viewer centre when omitted. */
   readonly zoomBy: (factor: number, anchor?: ScreenPoint) => void
+  /** Puts a model-space point at the centre of the viewer, keeping or setting the scale. */
+  readonly centerOn: (point: ModelPoint, scale?: number) => void
   /** Returns to the automatic fit. */
   readonly fit: () => void
 }
@@ -62,7 +66,25 @@ export function useViewportControls(bounds: Bounds, size: Size, padding: number)
     [size.width, size.height, update],
   )
 
+  const centerOn = useCallback(
+    (point: ModelPoint, scale?: number) => {
+      update((current) => {
+        const s = clampScale(scale ?? current.scale)
+        return {
+          scale: s,
+          tx: size.width / 2 - point.x * s,
+          ty: size.height / 2 + point.y * s,
+        }
+      })
+    },
+    [size.width, size.height, update],
+  )
+
   const fit = useCallback(() => setUser(null), [])
 
-  return { viewport, isFitted, update, zoomBy, fit }
+  return { viewport, isFitted, update, zoomBy, centerOn, fit }
+}
+
+function clampScale(scale: number): number {
+  return Math.min(Math.max(scale, DEFAULT_ZOOM_LIMITS.minScale), DEFAULT_ZOOM_LIMITS.maxScale)
 }

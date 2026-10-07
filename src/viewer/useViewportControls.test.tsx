@@ -1,6 +1,14 @@
 import { act, renderHook } from '@testing-library/react'
 
-import { fitBounds, modelToScreen, panBy, screenToModel, type Bounds, type Size } from '@/geometry'
+import {
+  DEFAULT_ZOOM_LIMITS,
+  fitBounds,
+  modelToScreen,
+  panBy,
+  screenToModel,
+  type Bounds,
+  type Size,
+} from '@/geometry'
 
 import { useViewportControls } from './useViewportControls'
 
@@ -84,5 +92,33 @@ describe('useViewportControls', () => {
     const screenAfter = modelToScreen(modelUnderAnchor, result.current.viewport)
     expect(screenAfter.x).toEqual(closeTo(anchor.x))
     expect(screenAfter.y).toEqual(closeTo(anchor.y))
+  })
+})
+
+describe('useViewportControls: centerOn', () => {
+  it('puts the given model point at the viewer centre, keeping the current scale', () => {
+    const { result } = renderHook(() => useViewportControls(bounds, size, padding))
+    const scaleBefore = result.current.viewport.scale
+    const target = { x: 5200, y: -2300 }
+
+    act(() => result.current.centerOn(target))
+
+    const onScreen = modelToScreen(target, result.current.viewport)
+    expect(onScreen.x).toEqual(closeTo(size.width / 2))
+    expect(onScreen.y).toEqual(closeTo(size.height / 2))
+    expect(result.current.viewport.scale).toBe(scaleBefore)
+    expect(result.current.isFitted).toBe(false)
+  })
+
+  it('applies a requested scale, clamped to the zoom limits', () => {
+    const { result } = renderHook(() => useViewportControls(bounds, size, padding))
+    const target = { x: 100, y: 100 }
+
+    act(() => result.current.centerOn(target, 0.5))
+    expect(result.current.viewport.scale).toBe(0.5)
+    expect(modelToScreen(target, result.current.viewport).x).toEqual(closeTo(size.width / 2))
+
+    act(() => result.current.centerOn(target, 1e9))
+    expect(result.current.viewport.scale).toBe(DEFAULT_ZOOM_LIMITS.maxScale)
   })
 })

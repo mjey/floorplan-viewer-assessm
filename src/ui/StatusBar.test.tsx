@@ -8,7 +8,8 @@ import { StatusBar } from './StatusBar'
 function readings(overrides: Partial<PolledReadings>): PolledReadings {
   return {
     status: 'live',
-    snapshot: null,
+    readings: new Map(),
+    sequence: null,
     updatedAt: null,
     error: null,
     isFetching: false,

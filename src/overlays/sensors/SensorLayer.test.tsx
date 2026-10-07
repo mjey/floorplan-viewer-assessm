@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 
 import type { Drawing } from '@/dxf'
 import { modelToScreen, type Viewport } from '@/geometry'
-import type { Reading, Sensor, SensorId } from '@/sensors'
+import type { Sensor, SensorId, SensorReading, SensorReadings } from '@/sensors'
 import { restoreViewerLayout, stubViewerLayout } from '@/test/viewerLayout'
 import { FloorplanViewer } from '@/viewer'
 
@@ -19,11 +19,24 @@ const drawing: Drawing = {
 
 const sensors: Sensor[] = [
   { id: 's1', label: 'Aisle A-01', position: { x: 5200, y: -2300 } },
+  { id: 's3', label: 'Aisle B-01', position: { x: 9000, y: -2300 } },
   { id: 's6', label: 'Aisle C-02', position: { x: 12_800, y: 3200 } },
 ]
 
-const readings = new Map<SensorId, Reading>([
-  ['s1', { timestamp: '2026-08-24T08:00:00Z', temperatureC: 20.5, humidityPct: 45 }],
+const fresh: SensorReading = {
+  reading: { timestamp: '2026-08-24T08:00:00Z', temperatureC: 20.5, humidityPct: 45 },
+  receivedAt: 1000,
+  stale: false,
+}
+const stale: SensorReading = {
+  reading: { timestamp: '2026-08-24T07:59:30Z', temperatureC: 23.4, humidityPct: 40 },
+  receivedAt: 500,
+  stale: true,
+}
+
+const readings: SensorReadings = new Map([
+  ['s1', fresh],
+  ['s3', stale],
   // s6 deliberately has no reading
 ])
 
@@ -48,7 +61,6 @@ function renderLayer(props: Partial<React.ComponentProps<typeof SensorLayer>> = 
       <SensorLayer
         sensors={sensors}
         readings={readings}
-        stale={false}
         selectedId={null}
         onSelect={onSelect}
         {...props}
@@ -105,6 +117,14 @@ describe('SensorLayer', () => {
     expect(screen.getByRole('button', { name: 'Aisle C-02: no data' })).toBeInTheDocument()
   })
 
+  it('keeps showing a sensor whose reading is stale, visibly marked, with its last value', () => {
+    renderLayer()
+
+    const marker = screen.getByRole('button', { name: 'Aisle B-01: 23.4 °C' })
+    expect(marker).toHaveAttribute('data-stale', 'true')
+    expect(screen.getByTestId('sensor-marker-s1')).toHaveAttribute('data-stale', 'false')
+  })
+
   it('shows a tooltip with label, temperature and humidity on hover', async () => {
     const user = userEvent.setup()
     renderLayer()
@@ -114,11 +134,15 @@ describe('SensorLayer', () => {
 
     const tooltip = screen.getByRole('tooltip')
     expect(tooltip).toHaveTextContent('Aisle A-01')
+    expect(tooltip).not.toHaveTextContent('(stale)')
     expect(tooltip).toHaveTextContent('20.5 °C')
     expect(tooltip).toHaveTextContent('45 %')
 
     await user.unhover(screen.getByTestId('sensor-marker-s1'))
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+    await user.hover(screen.getByTestId('sensor-marker-s3'))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Aisle B-01 (stale)')
   })
 
   it('selects on click and keyboard, and toggles off when the selected marker is clicked again', async () => {
@@ -134,13 +158,7 @@ describe('SensorLayer', () => {
 
     rerender(
       <FloorplanViewer drawing={drawing}>
-        <SensorLayer
-          sensors={sensors}
-          readings={readings}
-          stale={false}
-          selectedId="s1"
-          onSelect={onSelect}
-        />
+        <SensorLayer sensors={sensors} readings={readings} selectedId="s1" onSelect={onSelect} />
       </FloorplanViewer>,
     )
     expect(screen.getByTestId('sensor-marker-s1')).toHaveAttribute('aria-pressed', 'true')

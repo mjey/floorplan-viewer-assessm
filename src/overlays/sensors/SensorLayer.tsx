@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 
 import { modelToScreen, type ScreenPoint } from '@/geometry'
-import type { Reading, Sensor, SensorId } from '@/sensors'
+import type { Sensor, SensorId, SensorReadings } from '@/sensors'
 import { useViewport } from '@/viewer'
 
 import { SensorMarker } from './SensorMarker'
@@ -9,10 +9,8 @@ import { SensorTooltip } from './SensorTooltip'
 
 export interface SensorLayerProps {
   readonly sensors: readonly Sensor[]
-  /** Latest reading per sensor id; `null` before the first poll succeeds. */
-  readonly readings: ReadonlyMap<SensorId, Reading> | null
-  /** True when the readings shown are from an earlier poll than the latest attempt. */
-  readonly stale: boolean
+  /** Last known reading per sensor id, each with its own stale flag. */
+  readonly readings: SensorReadings
   readonly selectedId: SensorId | null
   readonly onSelect: (id: SensorId | null) => void
 }
@@ -31,7 +29,7 @@ interface PlacedSensor {
  * This is the template for any further overlay: take domain data as props, read the
  * viewport from context, draw in screen space.
  */
-export function SensorLayer({ sensors, readings, stale, selectedId, onSelect }: SensorLayerProps) {
+export function SensorLayer({ sensors, readings, selectedId, onSelect }: SensorLayerProps) {
   const { viewport, size } = useViewport()
   const [hoveredId, setHoveredId] = useState<SensorId | null>(null)
 
@@ -43,22 +41,25 @@ export function SensorLayer({ sensors, readings, stale, selectedId, onSelect }: 
 
   return (
     <g data-testid="sensor-layer">
-      {placed.map(({ sensor, at }) => (
-        <SensorMarker
-          key={sensor.id}
-          sensor={sensor}
-          reading={readings?.get(sensor.id)}
-          at={at}
-          selected={sensor.id === selectedId}
-          stale={stale}
-          onSelect={() => onSelect(sensor.id === selectedId ? null : sensor.id)}
-          onHoverChange={(hovering) => setHoveredId(hovering ? sensor.id : null)}
-        />
-      ))}
+      {placed.map(({ sensor, at }) => {
+        const entry = readings.get(sensor.id)
+        return (
+          <SensorMarker
+            key={sensor.id}
+            sensor={sensor}
+            reading={entry?.reading}
+            at={at}
+            selected={sensor.id === selectedId}
+            stale={entry?.stale ?? false}
+            onSelect={() => onSelect(sensor.id === selectedId ? null : sensor.id)}
+            onHoverChange={(hovering) => setHoveredId(hovering ? sensor.id : null)}
+          />
+        )
+      })}
       {hovered && (
         <SensorTooltip
           sensor={hovered.sensor}
-          reading={readings?.get(hovered.sensor.id)}
+          entry={readings.get(hovered.sensor.id)}
           at={hovered.at}
           viewer={size}
         />

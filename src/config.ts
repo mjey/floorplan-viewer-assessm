@@ -19,3 +19,6 @@ export const MOCK_LATENCY_MS = { min: 150, max: 600 } as const
 
 /** Pixels of empty margin around the floorplan when it is fitted to the viewer. */
 export const FIT_PADDING_PX = 32
+
+/** "Locate on map" zooms in at least this far (px per mm): 1 m spans 120 px. */
+export const LOCATE_MIN_SCALE = 0.12

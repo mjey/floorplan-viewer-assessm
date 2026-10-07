@@ -103,14 +103,14 @@ interface SensorApi {
 
 `Sensor` is static placement data (id, label, position). `Reading` is what changes. The overlay joins the two by id at render time, so a sensor with no reading yet still appears, marked "no data".
 
-`createMockSensorApi` implements the interface over `sensors.json`. Each poll answers with the next reading of every sensor, with randomised latency and a failure injected every 7th call (`MOCK_FAIL_EVERY` in `src/config.ts`) so the stale state is visible in a demo. When a series runs out it wraps around: the file holds 30 seconds of data per sensor and a feed that stopped after six polls would hide the behaviour this app exists to show.
+`createMockSensorApi` implements the interface over `sensors.json`. Each poll answers with the next reading of every sensor, with randomised latency and a failure injected every 7th call (`MOCK_FAIL_EVERY` in `src/config.ts`) so the stale state is visible in a demo. When a series runs out it wraps around: the file holds 30 seconds of data per sensor and a feed that stopped after six polls would hide the behaviour this app exists to show. Each pass shifts the timestamps forward by one series period, so the reading time keeps advancing instead of jumping back to the first timestamp.
 
 `usePolledReadings` drives it:
 
 - A `setTimeout` chain, not `setInterval`. The next poll is armed only after the previous one settles, so a slow response never overlaps the next request.
 - Four explicit states. `loading` before the first result, `live` after a success, `stale` when the latest poll failed but an earlier snapshot is still shown, `error` when there is nothing to show.
-- The last good snapshot is kept across failures. An operator wants the last known values, clearly flagged, not a blank map.
-- Pause via `enabled` (used when the tab is hidden) and `refresh()` for an immediate poll. Aborts on unmount.
+- Readings are kept per sensor across polls and failures, each with its own stale flag (`src/sensors/readingsState.ts`). A sensor that drops out of one poll stays on the map with its last value and a dashed marker; a failed poll marks everything stale. An operator wants the last known values, clearly flagged, not a blank map or a vanishing sensor.
+- Pause via `enabled` (used when the tab is hidden) and `refresh()` for an immediate poll. Aborts on unmount, and a poll cut short by a pause clears the in-flight flag so the refresh button does not stay disabled.
 
 The status bar reports the state, the age of the last successful poll, the failure reason, and offers a refresh.
 
@@ -139,6 +139,13 @@ function CracUnitsLayer({ units }: { units: readonly CracUnit[] }) {
 
 Nothing in the viewer or the sensor layer changes. `SensorLayer.tsx` is the worked example.
 
+### Moving the camera
+
+The viewport is owned by the viewer, so two routes exist for moving it:
+
+- Inside the viewer, an overlay reads `controls` from `useViewport()` and calls `centerOn`, `zoomBy`, `fit` or `update`.
+- Outside the viewer, a parent passes a `ref` and receives the same controls as a `FloorplanViewerHandle`. The detail card's "Locate on map" button works this way: `App` calls `centerOn(sensor.position, scale)` on the handle.
+
 ### Swapping the transport
 
 Implement `SensorApi` over a real endpoint and construct it in `main.tsx` instead of the mock. `App` takes the API as a prop and the tests already exercise it with a scripted implementation.
@@ -165,7 +172,7 @@ Implement `SensorApi` over a real endpoint and construct it in `main.tsx` instea
 | Markers under pan and zoom | Every marker coincides with the floorplan group's own transform matrix before and after a drag and a wheel zoom, through the real viewer component.                                                                                           |
 | DXF handling               | Unit heuristic cases, arc, circle and polyline path strings, arc bounds through axis extremes, normaliser warnings for skipped and flattened entities, and the real `floorplan.dxf` (952 entities, metres corrected, zone geometry).          |
 | Polling                    | First poll, interval advance, failure keeps the snapshot and reports stale then recovers, first-poll error, no overlapping requests, unmount, pause and resume, refresh. Fake timers throughout.                                              |
-| Mock API                   | One reading per poll, wrap-around, shared source load with retry, every-Nth failure, latency timing, abort.                                                                                                                                   |
+| Mock API                   | One reading per poll, wrap-around with monotonic timestamps, shared source load with retry, every-Nth failure, latency timing, abort.                                                                                                         |
 | User interaction           | Hover shows the tooltip with label, temperature and humidity; click pins the detail card; close removes it. Also drag pans by the exact delta, a sub-threshold press does not pan, a marker click does not pan, toolbar and keyboard fit.     |
 | States                     | Status bar wording for live, stale, offline and paused; app-level floorplan error, sensor-list error with retry recovering, readings offline.                                                                                                 |
 
@@ -175,26 +182,27 @@ Run with `npm test`.
 
 Each line maps to a requirement in the brief. Start with `npm run dev` and open http://localhost:5173.
 
-| Requirement                | How to check                                                 | Expected                                                                                                                                              |
-| -------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Renders the floorplan      | Load the page                                                | Walls, two door swings, two rack rows and a tinted zone; footer says the units were corrected from millimetres to metres                              |
-| Pan                        | Drag anywhere on the map; arrow keys when the map is focused | Floorplan and markers move together; the Fit button becomes enabled                                                                                   |
-| Zoom                       | Wheel over a marker; `+` / `-`; double-click                 | The point under the cursor stays put; markers keep their size; the scale bar relabels                                                                 |
-| Fit                        | Click the fit button or press `0`                            | The whole hall is centred with a margin; the button disables again                                                                                    |
-| Sensors at model positions | Compare markers with `public/sensors.json`                   | A column at the left, B in the middle, C at the right; the lower row is y = -2300, the upper row y = 3200                                             |
-| Current temperature shown  | Read the markers                                             | Value inside each disc; colour runs blue to red from 18 to 30 °C                                                                                      |
-| Detail on hover            | Hover or Tab to a marker                                     | Tooltip with label, temperature, humidity and reading time; flips at the edges                                                                        |
-| Detail on click            | Click a marker or press Enter on it                          | Card with label, temperature, humidity, time, position and id; Escape or the close button dismisses it; clicking the same marker again toggles it off |
-| Live updates               | Watch for 30 s                                               | Values change every 5 s and wrap after six readings; "updated N s ago" ticks                                                                          |
-| Polled API structure       | Open DevTools, Network                                       | `sensors.json` is fetched once; readings come from the `SensorApi` mock, which is the only transport the app knows                                    |
-| Loading state              | Open `?latency=2000-3000`                                    | Status shows Connecting with a pulsing dot until the first poll lands                                                                                 |
-| Slow poll                  | Same URL, keep watching                                      | The dot pulses during each poll; no overlapping requests, the next poll is armed only after the previous settles                                      |
-| Failure keeps last values  | Open `?failEvery=2`                                          | Every second poll turns the status to Stale, markers go dashed, the card says "showing last known values"; the next poll returns to Live              |
-| Total failure              | Stop the dev server, or open `?failEvery=1`                  | Status shows Offline with the reason; the refresh button retries                                                                                      |
-| Floorplan failure          | Rename `public/floorplan.dxf` and reload                     | An error with a Retry button; restore the file and retry                                                                                              |
-| Sensor list failure        | Break the JSON (remove an `id`) and reload                   | A notice naming the bad path, e.g. `[0].id must be a non-empty string`; Retry recovers once fixed                                                     |
-| Dev-mode double mount      | Default URL with React StrictMode (always on in `main.tsx`)  | Reaches Live every time; a cancelled `sensors.json` request from the throwaway mount is expected and harmless                                         |
-| Background tab             | Switch tabs for a while and come back                        | Status shows Paused while hidden; polling resumes immediately on return                                                                               |
+| Requirement                | How to check                                                                                            | Expected                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Renders the floorplan      | Load the page                                                                                           | Walls, two door swings, two rack rows and a tinted zone; footer says the units were corrected from millimetres to metres                              |
+| Pan                        | Drag anywhere on the map; arrow keys when the map is focused                                            | Floorplan and markers move together; the Fit button becomes enabled                                                                                   |
+| Zoom                       | Wheel over a marker; `+` / `-`; double-click                                                            | The point under the cursor stays put; markers keep their size; the scale bar relabels                                                                 |
+| Fit                        | Click the fit button or press `0`                                                                       | The whole hall is centred with a margin; the button disables again                                                                                    |
+| Sensors at model positions | Compare markers with `public/sensors.json`                                                              | A column at the left, B in the middle, C at the right; the lower row is y = -2300, the upper row y = 3200                                             |
+| Current temperature shown  | Read the markers                                                                                        | Value inside each disc; colour runs blue to red from 18 to 30 °C                                                                                      |
+| Detail on hover            | Hover or Tab to a marker                                                                                | Tooltip with label, temperature, humidity and reading time; flips at the edges                                                                        |
+| Detail on click            | Click a marker or press Enter on it                                                                     | Card with label, temperature, humidity, time, position and id; Escape or the close button dismisses it; clicking the same marker again toggles it off |
+| Live updates               | Watch for 30 s                                                                                          | Values change every 5 s and wrap after six readings; "updated N s ago" ticks                                                                          |
+| Polled API structure       | Open DevTools, Network                                                                                  | `sensors.json` is fetched once; readings come from the `SensorApi` mock, which is the only transport the app knows                                    |
+| Loading state              | Open `?latency=2000-3000`                                                                               | Status shows Connecting with a pulsing dot until the first poll lands                                                                                 |
+| Slow poll                  | Same URL, keep watching                                                                                 | The dot pulses during each poll; no overlapping requests, the next poll is armed only after the previous settles                                      |
+| Failure keeps last values  | Open `?failEvery=2`                                                                                     | Every second poll turns the status to Stale, every marker goes dashed, the card says "showing last known values"; the next poll returns to Live       |
+| One sensor drops out       | Not reachable with the mock; covered by the polling hook test "keeps a sensor that drops out of a poll" | That sensor alone stays on the map with its last value and a dashed marker, the tooltip says "(stale)", the others stay live                          |
+| Total failure              | Stop the dev server, or open `?failEvery=1`                                                             | Status shows Offline with the reason; the refresh button retries                                                                                      |
+| Floorplan failure          | Rename `public/floorplan.dxf` and reload                                                                | An error with a Retry button; restore the file and retry                                                                                              |
+| Sensor list failure        | Break the JSON (remove an `id`) and reload                                                              | A notice naming the bad path, e.g. `[0].id must be a non-empty string`; Retry recovers once fixed                                                     |
+| Dev-mode double mount      | Default URL with React StrictMode (always on in `main.tsx`)                                             | Reaches Live every time; a cancelled `sensors.json` request from the throwaway mount is expected and harmless                                         |
+| Background tab             | Switch tabs for a while and come back                                                                   | Status shows Paused while hidden; polling resumes immediately on return                                                                               |
 
 ## How I used AI assistants
 
@@ -212,6 +220,7 @@ Things the assistant produced that I rejected or reworked:
 - The app originally constructed the mock API itself. Moved to `main.tsx` and injected, which is what made the app testable with a scripted API.
 - Rendering markers inside the flipped floorplan group was considered for its zero extra maths and rejected for mirrored text and zoom-scaled markers.
 - Found in manual testing after the README was first written: in the dev server the status sometimes stuck on Connecting with a cancelled request for `sensors.json`. Cause: React StrictMode mounts, unmounts and remounts in development; the mock cached its one feed load bound to the first caller's abort signal, so the throwaway mount's abort cancelled the load for the real mount, and both hooks then swallowed the resulting AbortError as if it were their own. Fixed in three places, each with a test that failed first: the shared load is no longer tied to any caller's signal, and both hooks silence an AbortError only when their own controller aborted. The same change also fixed a latent case where a late response from a superseded load could knock the async-load hook back to loading.
+- A review pass over the first complete draft listed five limitations. Four became fixes, each test-first: staleness is now tracked per sensor so a sensor that drops out of a poll stays on the map marked stale instead of vanishing; the mock's timestamps keep advancing across wrap-around instead of jumping back; a poll cut short by a pause now clears the in-flight flag so the refresh button is not left disabled; and the camera is reachable from outside the viewer through a `ref` handle (and from overlays through context), which is what the detail card's "Locate on map" uses. The fifth, scaling to tens of thousands of entities, is recorded under what I would do next.
 
 Decisions made deliberately before code was written, rather than accepted from a draft: the `setTimeout` chain, keeping the last snapshot and flagging it stale, capturing the pointer only after the drag threshold, and specifying the marker alignment test before the overlay components existed.
 
@@ -235,6 +244,7 @@ Decisions made deliberately before code was written, rather than accepted from a
 6. **Transport.** A `FetchSensorApi` against a real endpoint, plus `ETag` handling so unchanged polls are cheap, and WebSocket push behind the same interface.
 7. **Viewport constraints** so the drawing cannot be panned entirely off-screen, and a URL-encoded viewport for shareable views.
 8. **Pinch and touch** gestures, and `ResizeObserver` debouncing on very frequent resizes.
+9. **Scaling up.** SVG is right for 952 entities and 6 sensors. At tens of thousands of entities the floorplan moves to canvas or WebGL with the same `Viewport` maths, markers get a spatial index for hit-testing and cluster at low zoom, and the `Drawing` is tiled or simplified by zoom level.
 
 ## Configuration
 

@@ -56,6 +56,7 @@ export function SensorMarker({
       aria-label={`${sensor.label}: ${value}`}
       aria-pressed={selected}
       data-testid={`sensor-marker-${sensor.id}`}
+      data-stale={stale}
       onClick={onSelect}
       onDoubleClick={swallow}
       onKeyDown={onKeyDown}

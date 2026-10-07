@@ -51,7 +51,7 @@ describe('usePolledReadings', () => {
     await act(() => vi.advanceTimersByTimeAsync(0))
 
     expect(result.current.status).toBe('live')
-    expect(result.current.snapshot?.sequence).toBe(1)
+    expect(result.current.sequence).toBe(1)
     expect(result.current.updatedAt).toBe(Date.parse('2026-08-24T08:00:00Z'))
     expect(result.current.isFetching).toBe(false)
   })
@@ -61,15 +61,15 @@ describe('usePolledReadings', () => {
     const { result } = renderHook(() => usePolledReadings(api, { intervalMs: INTERVAL }))
 
     await act(() => vi.advanceTimersByTimeAsync(0))
-    expect(result.current.snapshot?.sequence).toBe(1)
+    expect(result.current.sequence).toBe(1)
 
     await act(() => vi.advanceTimersByTimeAsync(INTERVAL - 1))
     expect(api.calls).toBe(1)
 
     await act(() => vi.advanceTimersByTimeAsync(1))
     expect(api.calls).toBe(2)
-    expect(result.current.snapshot?.sequence).toBe(2)
-    expect(result.current.snapshot?.readings.get('s1')?.temperatureC).toBe(22)
+    expect(result.current.sequence).toBe(2)
+    expect(result.current.readings.get('s1')?.reading.temperatureC).toBe(22)
   })
 
   it('keeps the last good snapshot and reports stale when a poll fails, then recovers', async () => {
@@ -81,13 +81,13 @@ describe('usePolledReadings', () => {
 
     await act(() => vi.advanceTimersByTimeAsync(INTERVAL))
     expect(result.current.status).toBe('stale')
-    expect(result.current.snapshot?.sequence).toBe(1)
+    expect(result.current.sequence).toBe(1)
     expect(result.current.updatedAt).toBe(firstUpdate)
     expect(result.current.error?.message).toBe('network down')
 
     await act(() => vi.advanceTimersByTimeAsync(INTERVAL))
     expect(result.current.status).toBe('live')
-    expect(result.current.snapshot?.sequence).toBe(3)
+    expect(result.current.sequence).toBe(3)
     expect(result.current.error).toBeNull()
   })
 
@@ -97,7 +97,7 @@ describe('usePolledReadings', () => {
 
     await act(() => vi.advanceTimersByTimeAsync(0))
     expect(result.current.status).toBe('error')
-    expect(result.current.snapshot).toBeNull()
+    expect(result.current.sequence).toBeNull()
 
     await act(() => vi.advanceTimersByTimeAsync(INTERVAL))
     expect(result.current.status).toBe('live')
@@ -152,12 +152,12 @@ describe('usePolledReadings', () => {
     rerender({ enabled: false })
     await act(() => vi.advanceTimersByTimeAsync(INTERVAL * 3))
     expect(api.calls).toBe(1)
-    expect(result.current.snapshot?.sequence).toBe(1)
+    expect(result.current.sequence).toBe(1)
 
     rerender({ enabled: true })
     await act(() => vi.advanceTimersByTimeAsync(0))
     expect(api.calls).toBe(2)
-    expect(result.current.snapshot?.sequence).toBe(2)
+    expect(result.current.sequence).toBe(2)
   })
 
   it('refresh() polls immediately', async () => {
@@ -171,7 +171,7 @@ describe('usePolledReadings', () => {
     })
 
     expect(api.calls).toBe(2)
-    expect(result.current.snapshot?.sequence).toBe(2)
+    expect(result.current.sequence).toBe(2)
   })
 })
 
@@ -194,5 +194,67 @@ describe('usePolledReadings: abort handling', () => {
     await act(() => vi.advanceTimersByTimeAsync(INTERVAL))
     expect(result.current.status).toBe('live')
     expect(api.calls).toBe(2)
+  })
+})
+
+describe('usePolledReadings: per-sensor staleness and cancellation', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-24T08:00:00Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('keeps a sensor that drops out of a poll, flagged stale, while the rest stay fresh', async () => {
+    const both: ReadingsSnapshot = {
+      readings: new Map([
+        ['s1', reading(20)],
+        ['s2', reading(30)],
+      ]),
+      sequence: 1,
+    }
+    const onlyS1: ReadingsSnapshot = { readings: new Map([['s1', reading(21)]]), sequence: 2 }
+    const api = scriptedApi([both, onlyS1])
+    const { result } = renderHook(() => usePolledReadings(api, { intervalMs: INTERVAL }))
+
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(result.current.readings.get('s2')?.stale).toBe(false)
+
+    await act(() => vi.advanceTimersByTimeAsync(INTERVAL))
+    expect(result.current.status).toBe('live')
+    expect(result.current.readings.get('s1')).toMatchObject({ reading: reading(21), stale: false })
+    expect(result.current.readings.get('s2')).toMatchObject({ reading: reading(30), stale: true })
+  })
+
+  it('marks every reading stale after a failed poll', async () => {
+    const api = scriptedApi([snapshot(1), new Error('down')])
+    const { result } = renderHook(() => usePolledReadings(api, { intervalMs: INTERVAL }))
+
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    await act(() => vi.advanceTimersByTimeAsync(INTERVAL))
+
+    expect(result.current.status).toBe('stale')
+    expect(result.current.readings.get('s1')?.stale).toBe(true)
+  })
+
+  it('clears isFetching when polling is paused mid-poll', async () => {
+    const api: SensorApi = {
+      listSensors: async () => [],
+      getLatestReadings: () => new Promise(() => {}), // never settles
+    }
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        usePolledReadings(api, { intervalMs: INTERVAL, enabled }),
+      { initialProps: { enabled: true } },
+    )
+
+    expect(result.current.isFetching).toBe(true)
+
+    rerender({ enabled: false })
+
+    expect(result.current.isFetching).toBe(false)
+    expect(result.current.status).toBe('loading')
   })
 })

@@ -170,3 +170,25 @@ describe('App: real mock API under StrictMode (dev-mode double mount)', () => {
     expect(markers).toHaveLength(6)
   })
 })
+
+describe('App: camera', () => {
+  beforeAll(() => stubViewerLayout())
+  afterAll(restoreViewerLayout)
+
+  it('"Locate on map" centres the viewer on the selected sensor', async () => {
+    mockFetch(() => new Response(floorplanSource, { status: 200 }))
+    const user = userEvent.setup()
+
+    render(<App sensorApi={instantApi()} />)
+    const marker = await screen.findByTestId('sensor-marker-s1')
+    await user.click(marker)
+    await user.click(screen.getByRole('button', { name: /locate on map/i }))
+
+    // The viewer is stubbed at 800 x 600, so its centre is (400, 300).
+    const transform = screen.getByTestId('sensor-marker-s1').getAttribute('transform') ?? ''
+    const m = /^translate\((\S+) (\S+)\)$/.exec(transform)
+    expect(m).not.toBeNull()
+    expect(Number(m![1])).toBeCloseTo(400, 6)
+    expect(Number(m![2])).toBeCloseTo(300, 6)
+  })
+})

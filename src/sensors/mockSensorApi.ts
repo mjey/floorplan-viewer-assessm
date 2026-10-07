@@ -76,10 +76,38 @@ function toSensor({ id, label, position }: SensorFeed): Sensor {
   return { id, label, position }
 }
 
-/** The reading for the Nth poll, cycling through the series. */
+/** Readings are at a fixed cadence; used when a series has a single entry. */
+const DEFAULT_STEP_MS = 5_000
+
+/**
+ * The reading for the Nth poll, cycling through the series. Each pass through the
+ * series shifts the timestamps forward by one series period, so time keeps moving
+ * forward in the UI instead of jumping back to the first timestamp on every wrap.
+ */
 function readingAt(series: readonly Reading[], poll: number): Reading | undefined {
-  if (series.length === 0) return undefined
-  return series[poll % series.length]
+  const reading = series[poll % series.length]
+  if (!reading) return undefined
+  const cycle = Math.floor(poll / series.length)
+  if (cycle === 0) return reading
+  return {
+    ...reading,
+    timestamp: shiftTimestamp(reading.timestamp, cycle * seriesPeriodMs(series)),
+  }
+}
+
+/** Time covered by one pass of the series: from its first reading to just before the next pass. */
+function seriesPeriodMs(series: readonly Reading[]): number {
+  const first = Date.parse(series[0]?.timestamp ?? '')
+  const last = Date.parse(series[series.length - 1]?.timestamp ?? '')
+  const step = series.length > 1 ? Date.parse(series[1]?.timestamp ?? '') - first : DEFAULT_STEP_MS
+  if (![first, last, step].every(Number.isFinite) || step <= 0) return 0
+  return last - first + step
+}
+
+function shiftTimestamp(timestamp: string, byMs: number): string {
+  const ms = Date.parse(timestamp)
+  if (!Number.isFinite(ms) || byMs === 0) return timestamp
+  return new Date(ms + byMs).toISOString()
 }
 
 /** Resolves with `promise`, or rejects with an AbortError as soon as `signal` aborts. */

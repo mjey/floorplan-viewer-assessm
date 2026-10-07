@@ -2,11 +2,15 @@ import { createContext, useContext } from 'react'
 
 import type { Size, Viewport } from '@/geometry'
 
+import type { ViewportControls } from './useViewportControls'
+
 export interface ViewportContextValue {
   /** The current model-to-screen mapping. Changes on every pan/zoom frame. */
   readonly viewport: Viewport
   /** Size of the viewer surface in CSS pixels. */
   readonly size: Size
+  /** Camera controls, for overlays that need to move the view (zoom to a marker, ...). */
+  readonly controls: ViewportControls
 }
 
 export const ViewportContext = createContext<ViewportContextValue | null>(null)

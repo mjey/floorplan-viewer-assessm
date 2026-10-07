@@ -142,3 +142,48 @@ describe('createMockSensorApi: shared feed load', () => {
     expect(source).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('createMockSensorApi: timestamps across wrap-around', () => {
+  const isoFeed: SensorFeed[] = [
+    {
+      id: 'a',
+      label: 'A',
+      position: { x: 0, y: 0 },
+      readings: [
+        { timestamp: '2026-08-24T08:00:00Z', temperatureC: 20, humidityPct: 40 },
+        { timestamp: '2026-08-24T08:00:05Z', temperatureC: 21, humidityPct: 40 },
+        { timestamp: '2026-08-24T08:00:10Z', temperatureC: 22, humidityPct: 40 },
+      ],
+    },
+    {
+      id: 'single',
+      label: 'One reading',
+      position: { x: 1, y: 1 },
+      readings: [{ timestamp: '2026-08-24T08:00:00Z', temperatureC: 25, humidityPct: 40 }],
+    },
+  ]
+
+  it('keeps time moving forward when a series wraps, by one series period per pass', async () => {
+    const api = createMockSensorApi({ source: async () => isoFeed, latencyMs: instant })
+
+    const stamps: string[] = []
+    for (let i = 0; i < 7; i += 1) {
+      stamps.push((await api.getLatestReadings()).readings.get('a')?.timestamp ?? '')
+    }
+
+    expect(stamps.map((s) => Date.parse(s))).toEqual(
+      ['08:00:00', '08:00:05', '08:00:10', '08:00:15', '08:00:20', '08:00:25', '08:00:30'].map(
+        (t) => Date.parse(`2026-08-24T${t}Z`),
+      ),
+    )
+  })
+
+  it('advances a single-reading series by the default cadence', async () => {
+    const api = createMockSensorApi({ source: async () => isoFeed, latencyMs: instant })
+
+    await api.getLatestReadings()
+    const second = await api.getLatestReadings()
+
+    expect(second.readings.get('single')?.timestamp).toBe('2026-08-24T08:00:05.000Z')
+  })
+})
